@@ -160,6 +160,17 @@ public static partial class DistributedCacheExtensions
         return matchServers;
     }
 
+    public static async Task<MatchServer?> GetMatchServerByAccountNameAndInstance(this IDatabase distributedCacheStore, string hostAccountName, int instance)
+    {
+        RedisValue serializedMatchServer = await distributedCacheStore.HashGetAsync(MatchServersKey, $"{hostAccountName}:{instance}");
+
+        if (serializedMatchServer.IsNullOrEmpty)
+            return null;
+
+        return JsonSerializer.Deserialize<MatchServer>(serializedMatchServer.ToString())
+            ?? throw new NullReferenceException($@"Unable To Deserialize Match Server With Key ""{hostAccountName}:{instance}""");
+    }
+
     public static async Task<MatchServer?> GetMatchServerByID(this IDatabase distributedCacheStore, int serverID)
     {
         HashEntry[] serializedMatchServers = await distributedCacheStore.HashGetAllAsync(MatchServersKey);

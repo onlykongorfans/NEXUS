@@ -54,6 +54,273 @@ public sealed class HostingAuthenticationTests(KONGORIntegrationWebApplicationFa
         }
     }
 
+    [Test]
+    public async Task Host_Authentication_Advertises_Internal_Chat_Endpoints()
+    {
+        await InitialiseIn("Development");
+
+        HttpResponseMessage managerResponse = await AuthenticateManager(DedicatedHostAccountName);
+        HttpResponseMessage serverResponse = await AuthenticateServer($"{DedicatedHostAccountName}:1");
+
+        await Assert.That(managerResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        await Assert.That(serverResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        IDictionary<object, object> managerData = await DeserialiseAuthenticationResponse(managerResponse);
+        IDictionary<object, object> serverData = await DeserialiseAuthenticationResponse(serverResponse);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(managerData["chat_address"] as string).IsEqualTo("internal-chat.test");
+            await Assert.That(Convert.ToInt32(managerData["chat_port"])).IsEqualTo(11033);
+            await Assert.That(serverData["chat_address"] as string).IsEqualTo("internal-chat.test");
+            await Assert.That(Convert.ToInt32(serverData["chat_port"])).IsEqualTo(11032);
+        }
+    }
+
+    [Test]
+    public async Task Empty_Instance_Registrations_Reuse_Identity_And_Cookie_By_IP_Address_And_Port()
+    {
+        await InitialiseIn("Development");
+
+        HttpResponseMessage managerResponse = await AuthenticateManager(DedicatedHostAccountName);
+
+        await Assert.That(managerResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        using IServiceScope scope = webApplicationFactory.Services.CreateScope();
+
+        IDatabase distributedCacheStore = scope.ServiceProvider.GetRequiredService<IDatabase>();
+
+        HttpResponseMessage firstResponse = await AuthenticateServer($"{DedicatedHostAccountName}:");
+
+        await Assert.That(firstResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        (int firstServerID, string firstSessionCookie) = await DeserialiseServerAuthenticationResponse(firstResponse);
+
+        MatchServer firstMatchServer = await distributedCacheStore.GetMatchServerByID(firstServerID)
+            ?? throw new NullReferenceException("First Match Server Is NULL");
+
+        HttpResponseMessage secondResponse = await AuthenticateServer($"{DedicatedHostAccountName}:");
+
+        await Assert.That(secondResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        (int secondServerID, string secondSessionCookie) = await DeserialiseServerAuthenticationResponse(secondResponse);
+
+        MatchServer secondMatchServer = await distributedCacheStore.GetMatchServerByID(secondServerID)
+            ?? throw new NullReferenceException("Second Match Server Is NULL");
+
+        HttpResponseMessage differentPortResponse = await AuthenticateServer($"{DedicatedHostAccountName}:", 11236);
+
+        await Assert.That(differentPortResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        (int differentPortServerID, string differentPortSessionCookie) = await DeserialiseServerAuthenticationResponse(differentPortResponse);
+
+        MatchServer differentPortMatchServer = await distributedCacheStore.GetMatchServerByID(differentPortServerID)
+            ?? throw new NullReferenceException("Different-Port Match Server Is NULL");
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(firstMatchServer.Instance).IsGreaterThan(0);
+            await Assert.That(secondMatchServer.Instance).IsEqualTo(firstMatchServer.Instance);
+            await Assert.That(secondServerID).IsEqualTo(firstServerID);
+            await Assert.That(secondSessionCookie).IsEqualTo(firstSessionCookie);
+            await Assert.That(firstMatchServer.Cookie).IsEqualTo(firstSessionCookie);
+            await Assert.That(secondMatchServer.Cookie).IsEqualTo(secondSessionCookie);
+
+            await Assert.That(differentPortMatchServer.Instance).IsGreaterThan(0);
+            await Assert.That(differentPortMatchServer.Instance).IsNotEqualTo(firstMatchServer.Instance);
+            await Assert.That(differentPortServerID).IsNotEqualTo(firstServerID);
+            await Assert.That(differentPortSessionCookie).IsNotEqualTo(firstSessionCookie);
+            await Assert.That(differentPortMatchServer.Cookie).IsEqualTo(differentPortSessionCookie);
+        }
+    }
+
+    [Test]
+    public async Task Explicit_Instance_Registrations_Reuse_Identity_And_Cookie()
+    {
+        await InitialiseIn("Development");
+
+        HttpResponseMessage managerResponse = await AuthenticateManager(DedicatedHostAccountName);
+
+        await Assert.That(managerResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        HttpResponseMessage firstResponse = await AuthenticateServer($"{DedicatedHostAccountName}:2", 11236);
+        HttpResponseMessage secondResponse = await AuthenticateServer($"{DedicatedHostAccountName}:2", 11236);
+
+        await Assert.That(firstResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        await Assert.That(secondResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        (int firstServerID, string firstSessionCookie) = await DeserialiseServerAuthenticationResponse(firstResponse);
+        (int secondServerID, string secondSessionCookie) = await DeserialiseServerAuthenticationResponse(secondResponse);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(firstServerID).IsEqualTo(secondServerID);
+            await Assert.That(firstSessionCookie).IsEqualTo(secondSessionCookie);
+        }
+    }
+
+    [Test]
+    public async Task Concurrent_Explicit_Instance_Registrations_Reuse_One_Identity_And_Cookie()
+    {
+        await InitialiseIn("Development");
+
+        HttpResponseMessage managerResponse = await AuthenticateManager(DedicatedHostAccountName);
+
+        await Assert.That(managerResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        TaskCompletionSource registrationGate = new (TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Task<HttpResponseMessage>[] registrationTasks = [.. Enumerable.Range(0, 8).Select(async _ =>
+        {
+            await registrationGate.Task;
+
+            return await AuthenticateServer($"{DedicatedHostAccountName}:2", 11236);
+        })];
+
+        registrationGate.SetResult();
+
+        HttpResponseMessage[] responses = await Task.WhenAll(registrationTasks);
+
+        await Assert.That(responses.All(response => response.StatusCode is HttpStatusCode.OK)).IsTrue();
+
+        List<(int ServerID, string SessionCookie)> registrations = [];
+
+        foreach (HttpResponseMessage response in responses)
+            registrations.Add(await DeserialiseServerAuthenticationResponse(response));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(registrations.Select(registration => registration.ServerID).Distinct().Count()).IsEqualTo(1);
+            await Assert.That(registrations.Select(registration => registration.SessionCookie).Distinct().Count()).IsEqualTo(1);
+        }
+    }
+
+    [Test]
+    public async Task Explicit_Instance_Registration_Cannot_Overwrite_A_Different_Address()
+    {
+        await InitialiseIn("Development");
+
+        HttpResponseMessage managerResponse = await AuthenticateManager(DedicatedHostAccountName);
+
+        await Assert.That(managerResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        HttpResponseMessage firstResponse = await AuthenticateServer($"{DedicatedHostAccountName}:2", 11236);
+
+        await Assert.That(firstResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        (int firstServerID, string firstSessionCookie) = await DeserialiseServerAuthenticationResponse(firstResponse);
+
+        HttpResponseMessage conflictingResponse = await AuthenticateServer($"{DedicatedHostAccountName}:2", 11237);
+
+        using IServiceScope scope = webApplicationFactory.Services.CreateScope();
+
+        IDatabase distributedCacheStore = scope.ServiceProvider.GetRequiredService<IDatabase>();
+
+        MatchServer preservedMatchServer = await distributedCacheStore.GetMatchServerByAccountNameAndInstance(DedicatedHostAccountName, 2)
+            ?? throw new NullReferenceException("Preserved Match Server Is NULL");
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(conflictingResponse.StatusCode).IsEqualTo(HttpStatusCode.Conflict);
+            await Assert.That(preservedMatchServer.ID).IsEqualTo(firstServerID);
+            await Assert.That(preservedMatchServer.Cookie).IsEqualTo(firstSessionCookie);
+            await Assert.That(preservedMatchServer.Port).IsEqualTo(11236);
+        }
+    }
+
+    [Test]
+    public async Task Different_Explicit_Instances_Cannot_Share_An_IP_Address_And_Port()
+    {
+        await InitialiseIn("Development");
+
+        HttpResponseMessage managerResponse = await AuthenticateManager(DedicatedHostAccountName);
+
+        await Assert.That(managerResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        HttpResponseMessage firstResponse = await AuthenticateServer($"{DedicatedHostAccountName}:2", 11236);
+
+        await Assert.That(firstResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        (int firstServerID, string firstSessionCookie) = await DeserialiseServerAuthenticationResponse(firstResponse);
+
+        HttpResponseMessage conflictingResponse = await AuthenticateServer($"{DedicatedHostAccountName}:3", 11236);
+
+        using IServiceScope scope = webApplicationFactory.Services.CreateScope();
+
+        IDatabase distributedCacheStore = scope.ServiceProvider.GetRequiredService<IDatabase>();
+
+        MatchServer preservedMatchServer = await distributedCacheStore.GetMatchServerByAccountNameAndInstance(DedicatedHostAccountName, 2)
+            ?? throw new NullReferenceException("Preserved Match Server Is NULL");
+
+        MatchServer? conflictingMatchServer = await distributedCacheStore.GetMatchServerByAccountNameAndInstance(DedicatedHostAccountName, 3);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(conflictingResponse.StatusCode).IsEqualTo(HttpStatusCode.Conflict);
+            await Assert.That(preservedMatchServer.ID).IsEqualTo(firstServerID);
+            await Assert.That(preservedMatchServer.Cookie).IsEqualTo(firstSessionCookie);
+            await Assert.That(conflictingMatchServer).IsNull();
+        }
+    }
+
+    [Test]
+    public async Task Explicit_Instance_Reauthentication_Preserves_Existing_Server_Metadata()
+    {
+        await InitialiseIn("Development");
+
+        HttpResponseMessage managerResponse = await AuthenticateManager(DedicatedHostAccountName);
+
+        await Assert.That(managerResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        HttpResponseMessage firstResponse = await AuthenticateServer($"{DedicatedHostAccountName}:2", 11236);
+
+        await Assert.That(firstResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        (int firstServerID, string firstSessionCookie) = await DeserialiseServerAuthenticationResponse(firstResponse);
+
+        using IServiceScope scope = webApplicationFactory.Services.CreateScope();
+
+        IDatabase distributedCacheStore = scope.ServiceProvider.GetRequiredService<IDatabase>();
+
+        MatchServer existingMatchServer = await distributedCacheStore.GetMatchServerByID(firstServerID)
+            ?? throw new NullReferenceException("Existing Match Server Is NULL");
+
+        string existingDisplayName = Random.Shared.Next().ToString("X8");
+        string existingLocation = "AUS";
+        DateTimeOffset existingRegistrationTimestamp = DateTimeOffset.UtcNow.AddMinutes(-10);
+        ChatProtocol.ServerStatus existingStatus = ChatProtocol.ServerStatus.SERVER_STATUS_IDLE;
+
+        existingMatchServer.Name = existingDisplayName;
+        existingMatchServer.Location = existingLocation;
+        existingMatchServer.TimestampRegistered = existingRegistrationTimestamp;
+        existingMatchServer.Status = existingStatus;
+
+        await distributedCacheStore.SetMatchServer(DedicatedHostAccountName, existingMatchServer);
+
+        HttpResponseMessage secondResponse = await AuthenticateServer(
+            $"{DedicatedHostAccountName}:2",
+            11236,
+            serverName: "NEXUS AU",
+            serverLocation: "EU");
+
+        await Assert.That(secondResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        (int secondServerID, string secondSessionCookie) = await DeserialiseServerAuthenticationResponse(secondResponse);
+
+        MatchServer preservedMatchServer = await distributedCacheStore.GetMatchServerByID(secondServerID)
+            ?? throw new NullReferenceException("Preserved Match Server Is NULL");
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(secondServerID).IsEqualTo(firstServerID);
+            await Assert.That(secondSessionCookie).IsEqualTo(firstSessionCookie);
+            await Assert.That(preservedMatchServer.Name).IsEqualTo(existingDisplayName);
+            await Assert.That(preservedMatchServer.Location).IsEqualTo(existingLocation);
+            await Assert.That(preservedMatchServer.TimestampRegistered).IsEqualTo(existingRegistrationTimestamp);
+            await Assert.That(preservedMatchServer.Status).IsEqualTo(existingStatus);
+        }
+    }
+
     private async Task InitialiseIn(string environment)
     {
         await webApplicationFactory.WithEnvironment(environment).WithSQLServerContainer().WithDistributedCacheContainer().InitialiseAsync();
@@ -77,7 +344,7 @@ public sealed class HostingAuthenticationTests(KONGORIntegrationWebApplicationFa
         return await httpClient.PostAsync("server_requester.php?f=replay_auth", new FormUrlEncodedContent(formData));
     }
 
-    private async Task<HttpResponseMessage> AuthenticateServer(string login)
+    private async Task<HttpResponseMessage> AuthenticateServer(string login, int serverPort = 11235, string serverName = "TEST-SERVER", string serverLocation = "EU", string serverIPAddress = "127.0.0.1")
     {
         HttpClient httpClient = webApplicationFactory.CreateClient();
 
@@ -87,14 +354,32 @@ public sealed class HostingAuthenticationTests(KONGORIntegrationWebApplicationFa
         {
             { "login", login },
             { "pass", ComputeServerPasswordHash(HostPassword) },
-            { "port", "11235" },
-            { "name", "TEST-SERVER" },
+            { "port", serverPort.ToString() },
+            { "name", serverName },
             { "desc", "Test Server" },
-            { "location", "EU" },
-            { "ip", "127.0.0.1" }
+            { "location", serverLocation },
+            { "ip", serverIPAddress }
         };
 
         return await httpClient.PostAsync("server_requester.php?f=new_session", new FormUrlEncodedContent(formData));
+    }
+
+    private static async Task<(int ServerID, string SessionCookie)> DeserialiseServerAuthenticationResponse(HttpResponseMessage response)
+    {
+        IDictionary<object, object> responseData = await DeserialiseAuthenticationResponse(response);
+
+        int serverID = Convert.ToInt32(responseData["server_id"]);
+        string sessionCookie = responseData["session"] as string ?? throw new NullReferenceException("Server Authentication Session Cookie Is NULL");
+
+        return (serverID, sessionCookie);
+    }
+
+    private static async Task<IDictionary<object, object>> DeserialiseAuthenticationResponse(HttpResponseMessage response)
+    {
+        string responseBody = await response.Content.ReadAsStringAsync();
+
+        return PhpSerialization.Deserialize(responseBody) as IDictionary<object, object>
+            ?? throw new NullReferenceException("Authentication Response Data Is NULL");
     }
 
     /// <summary>

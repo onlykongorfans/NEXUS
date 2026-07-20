@@ -13,6 +13,7 @@ public class ASPIRE
         // Get Chat Server Configuration
         IConfigurationSection chatServerConfiguration = builder.Configuration.GetRequiredSection("ChatServer");
         string chatServerHost = chatServerConfiguration.GetValue<string?>("Host") ?? throw new NullReferenceException("Chat Server Host Is NULL");
+        string chatServerClientHost = chatServerConfiguration.GetValue<string?>("ClientHost") ?? chatServerHost;
         int chatServerClientConnectionsPort = chatServerConfiguration.GetValue<int?>("ClientPort") ?? throw new NullReferenceException("Chat Server Client Connections Port Is NULL");
         int chatServerMatchServerConnectionsPort = chatServerConfiguration.GetValue<int?>("MatchServerPort") ?? throw new NullReferenceException("Chat Server Match Server Connections Port Is NULL");
         int chatServerMatchServerManagerConnectionsPort = chatServerConfiguration.GetValue<int?>("MatchServerManagerPort") ?? throw new NullReferenceException("Chat Server Match Server Manager Connections Port Is NULL");
@@ -141,6 +142,7 @@ public class ASPIRE
             .WithReference(distributedCache, connectionName: "DISTRIBUTED-CACHE").WaitFor(distributedCache) // Connect To Distributed Cache And Wait For It To Start
             .WithReference(logServer) // Connect To Structured Log Server
             .WithEnvironment("CHAT_SERVER_HOST", chatServerHost)
+            .WithEnvironment("CHAT_SERVER_CLIENT_HOST", chatServerClientHost)
             .WithEnvironment("CHAT_SERVER_PORT_CLIENT", chatServerClientConnectionsPort.ToString())
             .WithEnvironment("CHAT_SERVER_PORT_MATCH_SERVER", chatServerMatchServerConnectionsPort.ToString())
             .WithEnvironment("CHAT_SERVER_PORT_MATCH_SERVER_MANAGER", chatServerMatchServerManagerConnectionsPort.ToString())

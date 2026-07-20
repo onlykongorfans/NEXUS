@@ -92,12 +92,13 @@ public partial class ServerRequesterController
     private async Task<IActionResult> HandleServerAuthentication()
     {
         string serverIdentifier = Request.Form["login"].ToString();
+        string[] serverIdentifierComponents = serverIdentifier.Split(':');
 
-        if (serverIdentifier.Split(':').Length is not 2)
+        if (serverIdentifierComponents.Length is not 2)
             return BadRequest(@"Missing Or Incorrect Value For Form Parameter ""login""");
 
-        string hostAccountName = serverIdentifier.Split(':').First();
-        string serverInstance = serverIdentifier.Split(':').Last();
+        string hostAccountName = serverIdentifierComponents.First();
+        string serverInstanceSuffix = serverIdentifierComponents.Last();
 
         string? accountPasswordHash = Request.Form["pass"];
 
@@ -108,6 +109,9 @@ public partial class ServerRequesterController
 
         if (serverPort is null)
             return BadRequest(@"Missing Value For Form Parameter ""port""");
+
+        if (int.TryParse(serverPort, out int parsedServerPort) is false || parsedServerPort <= IPEndPoint.MinPort || parsedServerPort > IPEndPoint.MaxPort)
+            return BadRequest(@"Missing Or Incorrect Value For Form Parameter ""port""");
 
         string? serverName = Request.Form["name"];
 
@@ -154,53 +158,129 @@ public partial class ServerRequesterController
             return Unauthorized($@"The Built-In ""{OOTB.Accounts.OPERATOR.Name}"" Account Cannot Host On The Production Server; Create A Dedicated Host Account");
         }
 
-        MatchServerManager? matchServerManager = (await DistributedCache.GetMatchServerManagersByAccountName(hostAccountName)).SingleOrDefault();
+        bool serverInstanceIsExplicit = string.IsNullOrEmpty(serverInstanceSuffix) is false;
+        int explicitServerInstance = 0;
 
-        MatchServer matchServer = new ()
+        if (serverInstanceIsExplicit && (int.TryParse(serverInstanceSuffix, out explicitServerInstance) is false || explicitServerInstance <= 0))
+            return BadRequest(@"Missing Or Incorrect Value For Form Parameter ""login""");
+
+        RedisKey registrationLockKey = "MATCH-SERVER-REGISTRATION-LOCK";
+        RedisValue registrationLockToken = Guid.CreateVersion7().ToString();
+        TimeSpan registrationLockExpiration = TimeSpan.FromSeconds(30);
+
+        while (await DistributedCache.LockTakeAsync(registrationLockKey, registrationLockToken, registrationLockExpiration) is false)
+            await Task.Delay(TimeSpan.FromMilliseconds(25), HttpContext.RequestAborted);
+
+        try
         {
-            HostAccountID = account.ID,
-            HostAccountName = account.Name,
-            ID = serverIdentifier.GetDeterministicInt32Hash(),
-            Name = serverName,
-            MatchServerManagerID = matchServerManager?.ID,
-            Instance = int.Parse(serverInstance),
-            IPAddress = serverIPAddress,
-            Port = int.Parse(serverPort),
-            Location = serverLocation,
-            Description = serverDescription
-        };
+            MatchServerManager? matchServerManager = (await DistributedCache.GetMatchServerManagersByAccountName(hostAccountName)).SingleOrDefault();
+            List<MatchServer> registeredMatchServers = await DistributedCache.GetMatchServers();
+            List<MatchServer> hostMatchServers = [.. registeredMatchServers.Where(matchServer => matchServer.HostAccountName.Equals(hostAccountName))];
+            int serverInstance;
 
-        await DistributedCache.SetMatchServer(hostAccountName, matchServer);
+            if (serverInstanceIsExplicit)
+            {
+                serverInstance = explicitServerInstance;
+            }
 
-        if (matchServerManager is not null)
-        {
-            matchServerManager.MatchServerIDs.Add(matchServer.ID);
+            else
+            {
+                if (matchServerManager is null)
+                    return Unauthorized("A Registered Match Server Manager Is Required When The Server Instance Is Missing");
 
-            await DistributedCache.SetMatchServerManager(hostAccountName, matchServerManager);
+                MatchServer? existingMatchServerByAddress = hostMatchServers.OrderBy(matchServer => matchServer.Instance).FirstOrDefault(matchServer =>
+                    matchServer.IPAddress.Equals(serverIPAddress) && matchServer.Port == parsedServerPort);
+
+                serverInstance = existingMatchServerByAddress?.Instance ?? (hostMatchServers.Count is 0 ? 1 : hostMatchServers.Max(matchServer => matchServer.Instance) + 1);
+            }
+
+            serverIdentifier = $"{hostAccountName}:{serverInstance}";
+
+            MatchServer? existingMatchServer = await DistributedCache.GetMatchServerByAccountNameAndInstance(hostAccountName, serverInstance);
+
+            if (existingMatchServer is not null
+                && (existingMatchServer.IPAddress.Equals(serverIPAddress) is false || existingMatchServer.Port != parsedServerPort))
+            {
+                Logger.LogWarning(@"Rejected Match Server Registration For Host Account ""{HostAccountName}"" Instance ""{ServerInstance}"" At ""{ServerAddress}"":""{ServerPort}"" Because The Slot Is Already Registered At ""{ExistingServerAddress}"":""{ExistingServerPort}""",
+                    hostAccountName, serverInstance, serverIPAddress, parsedServerPort, existingMatchServer.IPAddress, existingMatchServer.Port);
+
+                return Conflict($@"Match Server Instance ""{serverInstance}"" Is Already Registered At ""{existingMatchServer.IPAddress}:{existingMatchServer.Port}""");
+            }
+
+            MatchServer? conflictingEndpointOwner = registeredMatchServers.FirstOrDefault(matchServer =>
+                matchServer.IPAddress.Equals(serverIPAddress)
+                && matchServer.Port == parsedServerPort
+                && (matchServer.HostAccountName.Equals(hostAccountName) is false || matchServer.Instance != serverInstance));
+
+            if (conflictingEndpointOwner is not null)
+            {
+                Logger.LogWarning(@"Rejected Match Server Registration For Host Account ""{HostAccountName}"" Instance ""{ServerInstance}"" At ""{ServerAddress}"":""{ServerPort}"" Because The Endpoint Is Already Owned By Host Account ""{ExistingHostAccountName}"" Instance ""{ExistingServerInstance}""",
+                    hostAccountName, serverInstance, serverIPAddress, parsedServerPort, conflictingEndpointOwner.HostAccountName, conflictingEndpointOwner.Instance);
+
+                return Conflict($@"Match Server Endpoint ""{serverIPAddress}:{parsedServerPort}"" Is Already Registered To Instance ""{conflictingEndpointOwner.Instance}""");
+            }
+
+            MatchServer matchServer;
+
+            if (existingMatchServer is null)
+            {
+                matchServer = new MatchServer
+                {
+                    HostAccountID = account.ID,
+                    HostAccountName = account.Name,
+                    ID = serverIdentifier.GetDeterministicInt32Hash(),
+                    Name = serverName,
+                    MatchServerManagerID = matchServerManager?.ID,
+                    Instance = serverInstance,
+                    IPAddress = serverIPAddress,
+                    Port = parsedServerPort,
+                    Location = serverLocation,
+                    Description = serverDescription
+                };
+
+                await DistributedCache.SetMatchServer(hostAccountName, matchServer);
+            }
+
+            else
+            {
+                matchServer = existingMatchServer;
+            }
+
+            if (matchServerManager is not null && matchServerManager.MatchServerIDs.Contains(matchServer.ID) is false)
+            {
+                matchServerManager.MatchServerIDs.Add(matchServer.ID);
+
+                await DistributedCache.SetMatchServerManager(hostAccountName, matchServerManager);
+            }
+
+            // TODO: Implement Verifier In Description (If The Server Is A COMPEL Server, It Will Have A Verifier In The Description)
+            // INFO: The Server Manager Doesn't Send Descriptions, So Use Name Instead Since We Can Override Them Anyway Via Remote Command (svr_name) On TCP Handshake
+
+            string chatServerHost = Environment.GetEnvironmentVariable("CHAT_SERVER_HOST")
+                ?? throw new NullReferenceException("Chat Server Host Is NULL");
+
+            int chatServerMatchServerConnectionsPort = int.Parse(Environment.GetEnvironmentVariable("CHAT_SERVER_PORT_MATCH_SERVER")
+                ?? throw new NullReferenceException("Chat Server Match Server Connections Port Is NULL"));
+
+            Dictionary<string, object> response = new ()
+            {
+                ["session"] = matchServer.Cookie,
+                ["server_id"] = matchServer.ID,
+                ["chat_address"] = chatServerHost,
+                ["chat_port"] = chatServerMatchServerConnectionsPort,
+                ["leaverthreshold"] = 0.05
+            };
+
+            Logger.LogInformation(@"Server ID ""{MatchServerID}"" Was Registered At ""{MatchServerAddress}"":""{MatchServerPort}"" With Cookie ""{MatchServerCookie}""",
+                matchServer.ID, matchServer.IPAddress, matchServer.Port, matchServer.Cookie);
+
+            return Ok(PhpSerialization.Serialize(response));
         }
 
-        // TODO: Implement Verifier In Description (If The Server Is A COMPEL Server, It Will Have A Verifier In The Description)
-        // INFO: The Server Manager Doesn't Send Descriptions, So Use Name Instead Since We Can Override Them Anyway Via Remote Command (svr_name) On TCP Handshake
-
-        string chatServerHost = Environment.GetEnvironmentVariable("CHAT_SERVER_HOST")
-            ?? throw new NullReferenceException("Chat Server Host Is NULL");
-
-        int chatServerMatchServerConnectionsPort = int.Parse(Environment.GetEnvironmentVariable("CHAT_SERVER_PORT_MATCH_SERVER")
-            ?? throw new NullReferenceException("Chat Server Match Server Connections Port Is NULL"));
-
-        Dictionary<string, object> response = new ()
+        finally
         {
-            ["session"] = matchServer.Cookie,
-            ["server_id"] = matchServer.ID,
-            ["chat_address"] = chatServerHost,
-            ["chat_port"] = chatServerMatchServerConnectionsPort,
-            ["leaverthreshold"] = 0.05
-        };
-
-        Logger.LogInformation(@"Server ID ""{MatchServerID}"" Was Registered At ""{MatchServerAddress}"":""{MatchServerPort}"" With Cookie ""{MatchServerCookie}""",
-            matchServer.ID, matchServer.IPAddress, matchServer.Port, matchServer.Cookie);
-
-        return Ok(PhpSerialization.Serialize(response));
+            await DistributedCache.LockReleaseAsync(registrationLockKey, registrationLockToken);
+        }
     }
 
     private async Task<IActionResult> HandleConnectClient()

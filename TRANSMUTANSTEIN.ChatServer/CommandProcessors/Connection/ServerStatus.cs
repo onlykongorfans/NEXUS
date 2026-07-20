@@ -31,6 +31,9 @@ public class ServerStatus(IDatabase distributedCacheStore) : IAsynchronousComman
         // Update Match Server Status
         matchServer.Status = requestData.Status;
 
+        // A Live Status Update Proves That A Replacement Has Completed Its Chat Handover And Can Clear The Retirement Guard
+        matchServer.IsRetired = false;
+
         // Update Distributed Cache
         await distributedCacheStore.SetMatchServer(matchServer.HostAccountName, matchServer);
 

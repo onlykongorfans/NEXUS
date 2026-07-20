@@ -4,7 +4,7 @@
         "ASPIRE.ApplicationHost Development": {
             "commandName": "Project",
             "launchBrowser": true,
-            "applicationUrl": "https://localhost:5550",
+            "applicationUrl": "https://0.0.0.0:5550",
             "environmentVariables": {
                 "ASPNETCORE_ENVIRONMENT": "Development",
                 "DOTNET_ENVIRONMENT": "Development",

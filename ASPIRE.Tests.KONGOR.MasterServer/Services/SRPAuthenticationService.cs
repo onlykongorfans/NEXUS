@@ -162,6 +162,8 @@ public sealed class SRPAuthenticationService(KONGORIntegrationWebApplicationFact
         string cookie = stageTwoData["cookie"] as string ?? throw new NullReferenceException("Cookie Is NULL");
         string name = stageTwoData["nickname"] as string ?? throw new NullReferenceException("Name Is NULL");
         string email = stageTwoData["email"] as string ?? throw new NullReferenceException("Email Is NULL");
+        string chatServerHost = stageTwoData["chat_url"] as string ?? throw new NullReferenceException("Chat Server Host Is NULL");
+        int chatServerPort = Convert.ToInt32(stageTwoData["chat_port"]);
 
         return new SRPAuthenticationData
         {
@@ -170,7 +172,9 @@ public sealed class SRPAuthenticationService(KONGORIntegrationWebApplicationFact
             ServerProof = serverProof,
             Cookie = cookie,
             Name = name,
-            Email = email
+            Email = email,
+            ChatServerHost = chatServerHost,
+            ChatServerPort = chatServerPort
         };
     }
 

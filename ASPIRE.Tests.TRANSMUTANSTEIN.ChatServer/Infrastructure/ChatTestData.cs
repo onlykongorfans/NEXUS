@@ -60,7 +60,7 @@ internal static class ChatTestData
     /// <summary>
     ///     Seeds a match server in the distributed cache so that a match server handshake with the matching cookie and identifier succeeds.
     /// </summary>
-    public static async Task SeedMatchServer(IServiceProvider services, int serverID, int hostAccountID, string hostAccountName, string cookie)
+    public static async Task SeedMatchServer(IServiceProvider services, int serverID, int hostAccountID, string hostAccountName, string cookie, ChatProtocol.ServerStatus status = ChatProtocol.ServerStatus.SERVER_STATUS_UNKNOWN)
     {
         await using AsyncServiceScope scope = services.CreateAsyncScope();
 
@@ -78,7 +78,8 @@ internal static class ChatTestData
             Port = 11235,
             Location = "USE",
             Description = "Integration Test Server",
-            Cookie = cookie
+            Cookie = cookie,
+            Status = status
         };
 
         await distributedCacheStore.SetMatchServer(hostAccountName, matchServer);

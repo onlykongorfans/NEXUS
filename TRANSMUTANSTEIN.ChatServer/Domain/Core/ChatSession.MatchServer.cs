@@ -236,7 +236,7 @@ public class MatchServerChatSession(ConnectionContext connection, IServiceProvid
 
     /// <summary>
     ///     Tracks whether the cleanup has already run for this session.
-    ///     Required because the graceful (<see cref="Terminate"/>), dropped (<see cref="OnDisconnected"/>), and superseded (<see cref="Supersede"/>) paths can all be reached for the same session, and only one of them should take effect.
+    ///     Required because the graceful (<see cref="Terminate"/>), retiring (<see cref="Retire"/>), dropped (<see cref="OnDisconnected"/>), and superseded (<see cref="Supersede"/>) paths can all be reached for the same session, and only one of them should take effect.
     /// </summary>
     private int CleanupCompleted;
 
@@ -285,6 +285,24 @@ public class MatchServerChatSession(ConnectionContext connection, IServiceProvid
     }
 
     /// <summary>
+    ///     Retires this managed match server session so that its replacement can reconnect with the same identifier and session cookie.
+    ///     The session is removed from the in-memory pool and the socket is closed gracefully, while the distributed cache registration is deliberately preserved for the replacement handshake.
+    /// </summary>
+    public async Task Retire()
+    {
+        try
+        {
+            if (RemoveFromPoolIfCurrentHolder())
+                await MarkRetired();
+        }
+
+        finally
+        {
+            await CloseGracefully();
+        }
+    }
+
+    /// <summary>
     ///     Performs an immediate, authoritative teardown of this session, reached on a graceful shutdown, a rejected handshake, or when the <see cref="StaleHostReaper"/> reaps a hung session.
     ///     The distributed cache entry is removed right away, whereas the dropped-connection path (<see cref="OnDisconnected"/>) leaves it for the reaper to reconcile after its grace period.
     /// </summary>
@@ -308,21 +326,50 @@ public class MatchServerChatSession(ConnectionContext connection, IServiceProvid
 
     /// <summary>
     ///     Invoked by the TCP transport after the underlying socket has been closed (graceful disconnect, network drop, crash, or keep-alive timeout).
-    ///     On a dropped connection, it removes the in-memory session so the server is never selected for a match, but deliberately leaves the distributed cache entry in place for the <see cref="StaleHostReaper"/> to reconcile.
+    ///     On a dropped connection, it removes the in-memory session and marks the retained distributed cache entry as retired so the server is not selectable while the <see cref="StaleHostReaper"/> grace period allows a replacement to reconnect with the same cookie.
     ///     When the disconnect is graceful, <see cref="Terminate"/> has already torn the session down, so there is nothing left for this method to do.
     /// </summary>
     protected override void OnDisconnected()
     {
-        RemoveFromPoolIfCurrentHolder();
+        if (RemoveFromPoolIfCurrentHolder())
+            _ = MarkRetiredAfterDroppedConnection();
 
         /*
-            The Session Is Removed From The In-Memory Pool (Which Excludes It From Match Selection), But The Distributed Cache Entry Is Left In Place
+            The Session Is Removed From The In-Memory Pool, And The Preserved Distributed Cache Entry Is Marked Retired So Server Lists Also Exclude It
             A Dropped Connection Is Frequently A Brief Reconnect: The Host Reuses Its Session Cookie, And The Handshake Validates That Cookie Against The Cache Entry, So Tearing The Entry Down Here Would Reject The Reconnect
             If The Host Does Not Reconnect, The <see cref="StaleHostReaper"/> Reaps The Now-Sessionless Cache Entry After Its Grace Period
             A Graceful Shutdown Still Tears Down Immediately Via "Terminate"
          */
 
         base.OnDisconnected();
+    }
+
+    private async Task MarkRetired()
+    {
+        IDatabase distributedCacheStore = ServiceProvider.GetRequiredService<IDatabase>();
+
+        MatchServer? matchServer = await distributedCacheStore.GetMatchServerByID(Metadata.ServerID);
+
+        if (matchServer is null || Context.MatchServerChatSessions.ContainsKey(Metadata.ServerID))
+            return;
+
+        // Preserve The Registration And Cookie For The Replacement, But Make The Retired Process Immediately Ineligible For Server Lists And Match Selection During The Reaper Grace Period
+        matchServer.IsRetired = true;
+        matchServer.Status = ChatProtocol.ServerStatus.SERVER_STATUS_CRASHED;
+
+        await distributedCacheStore.SetMatchServer(matchServer.HostAccountName, matchServer);
+
+        Log.Information(@"Match Server ID ""{MatchServerID}"" Was Marked Retired While Its Registration Was Preserved For Handover", Metadata.ServerID);
+    }
+
+    private async Task MarkRetiredAfterDroppedConnection()
+    {
+        try { await MarkRetired(); }
+
+        catch (Exception exception)
+        {
+            Log.Error(exception, @"Failed To Mark Dropped Match Server ID ""{MatchServerID}"" As Retired", Metadata.ServerID);
+        }
     }
 
     private async Task Remove(IDatabase distributedCacheStore)

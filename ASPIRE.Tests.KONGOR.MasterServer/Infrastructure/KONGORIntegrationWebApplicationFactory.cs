@@ -10,7 +10,8 @@ public sealed class KONGORIntegrationWebApplicationFactory(ServiceContainerConte
     protected override void ConfigureEnvironment(IWebHostBuilder builder)
     {
         // Production Reads These Via Environment.GetEnvironmentVariable Rather Than IConfiguration, So builder.UseSetting Would Not Reach Them.
-        Environment.SetEnvironmentVariable("CHAT_SERVER_HOST", "localhost");
+        Environment.SetEnvironmentVariable("CHAT_SERVER_HOST", "internal-chat.test");
+        Environment.SetEnvironmentVariable("CHAT_SERVER_CLIENT_HOST", "public-chat.test");
         Environment.SetEnvironmentVariable("CHAT_SERVER_PORT_CLIENT", "11031");
         Environment.SetEnvironmentVariable("CHAT_SERVER_PORT_MATCH_SERVER", "11032");
         Environment.SetEnvironmentVariable("CHAT_SERVER_PORT_MATCH_SERVER_MANAGER", "11033");

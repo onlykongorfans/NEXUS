@@ -17,5 +17,9 @@ public class SRPAuthenticationData
 
     public string? Cookie { get; init; }
 
+    public string? ChatServerHost { get; init; }
+
+    public int? ChatServerPort { get; init; }
+
     public string? ErrorMessage { get; init; }
 }

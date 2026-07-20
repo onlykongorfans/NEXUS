@@ -145,6 +145,8 @@ public sealed class SRPAuthenticationTests(KONGORIntegrationWebApplicationFactor
             await Assert.That(result.Name).IsEqualTo(accountName);
             await Assert.That(result.Email).IsEqualTo(emailAddress);
             await Assert.That(result.Cookie).IsNotEmpty();
+            await Assert.That(result.ChatServerHost).IsEqualTo("public-chat.test");
+            await Assert.That(result.ChatServerPort).IsEqualTo(11031);
         }
     }
 

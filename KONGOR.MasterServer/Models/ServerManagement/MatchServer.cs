@@ -24,6 +24,12 @@ public class MatchServer
 
     public ServerStatus Status { get; set; } = ServerStatus.SERVER_STATUS_UNKNOWN;
 
+    /// <summary>
+    ///     Indicates that the previous chat session retired while this registration is being retained for a replacement handshake.
+    ///     Retired servers remain authenticated by their existing cookie but are excluded from server selection until a live chat status update reactivates them.
+    /// </summary>
+    public bool IsRetired { get; set; } = false;
+
     public string Cookie { get; set; } = Guid.CreateVersion7().ToString();
 
     public DateTimeOffset TimestampRegistered { get; set; } = DateTimeOffset.UtcNow;

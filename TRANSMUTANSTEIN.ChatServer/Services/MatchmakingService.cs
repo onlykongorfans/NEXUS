@@ -654,7 +654,7 @@ public class MatchmakingService : BackgroundService, IDisposable
 
         // Rank Unassigned, Idle Servers By Regional Proximity To The Match's Requested Regions
         List<MatchServer> candidateServers = [.. servers
-            .Where(server => server.Status is ServerStatus.SERVER_STATUS_IDLE && assignedServerIDs.Contains(server.ID) is false)
+            .Where(server => server.IsRetired is false && server.Status is ServerStatus.SERVER_STATUS_IDLE && assignedServerIDs.Contains(server.ID) is false)
             .OrderBy(server => RegionProximity.GetDistance(match.CommonGameRegions, server.Location))];
 
         // Find The Closest Candidate Server That Also Has An Active Chat Session

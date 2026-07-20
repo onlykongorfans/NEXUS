@@ -219,8 +219,9 @@ public partial class ClientRequesterController
 
         // TODO: Resolve Suspensions
 
-        string chatServerHost = Environment.GetEnvironmentVariable("CHAT_SERVER_HOST")
-            ?? throw new NullReferenceException("Chat Server Host Is NULL");
+        string chatServerHost = Environment.GetEnvironmentVariable("CHAT_SERVER_CLIENT_HOST")
+            ?? Environment.GetEnvironmentVariable("CHAT_SERVER_HOST")
+            ?? throw new NullReferenceException("Chat Server Client Host Is NULL");
 
         int chatServerClientConnectionsPort = int.Parse(Environment.GetEnvironmentVariable("CHAT_SERVER_PORT_CLIENT")
             ?? throw new NullReferenceException("Chat Server Client Connections Port Is NULL"));
