@@ -19,6 +19,7 @@ global using MERRICK.DatabaseContext.Persistence;
 global using MERRICK.DatabaseContext.Services;
 
 global using Microsoft.AspNetCore.HttpOverrides;
+global using Microsoft.AspNetCore.Identity;
 global using Microsoft.EntityFrameworkCore;
 global using Microsoft.EntityFrameworkCore.ChangeTracking;
 global using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -34,4 +35,6 @@ global using System.Net.Sockets;
 global using System.Reflection;
 global using System.Runtime.CompilerServices;
 global using System.Security.Claims;
+global using System.Security.Cryptography;
+global using System.Text;
 global using System.Text.Json;

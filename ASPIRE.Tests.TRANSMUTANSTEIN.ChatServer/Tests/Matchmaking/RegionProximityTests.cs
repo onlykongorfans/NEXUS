@@ -19,6 +19,18 @@ public sealed class RegionProximityTests
     }
 
     [Test]
+    public async Task Australia_Is_A_Separate_Aggregate_From_South_East_Asia()
+    {
+        using (Assert.Multiple())
+        {
+            await Assert.That(GameRegions.GetAggregate("AU")).IsEqualTo("AU");
+            await Assert.That(GameRegions.NormaliseServerLocation("AU")).IsEqualTo("AU");
+            await Assert.That(GameRegions.GetAggregate("SG")).IsEqualTo("SEA");
+            await Assert.That(RegionProximity.GetDistance(["AU"], "SG")).IsGreaterThan(0.0);
+        }
+    }
+
+    [Test]
     public async Task The_Newerth_Wildcard_Has_Zero_Distance_To_Every_Location()
     {
         await Assert.That(RegionProximity.GetDistance([GameRegions.Wildcard], "AU")).IsEqualTo(0.0);
@@ -81,7 +93,7 @@ public sealed class RegionProximityTests
     [Arguments("KR")]
     public async Task Every_Client_Region_Code_Maps_Into_An_Aggregate(string clientRegionCode)
     {
-        string[] aggregates = ["US", "LAT", "EU", "SEA"];
+        string[] aggregates = ["US", "LAT", "EU", "SEA", "AU"];
 
         await Assert.That(aggregates.Contains(GameRegions.GetAggregate(clientRegionCode), StringComparer.OrdinalIgnoreCase)).IsTrue();
     }

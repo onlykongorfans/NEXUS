@@ -183,6 +183,80 @@ public sealed class SRPAuthenticationTests(KONGORIntegrationWebApplicationFactor
     }
 
     [Test]
+    [Arguments("unavailablehardware@kongor.com", "UnavailableHW", "SecurePassword123!")]
+    public async Task Authenticate_With_SRP_With_Unavailable_Windows_System_Information_Returns_Success_Without_Storing_Empty_Hardware_Data(
+        string emailAddress, string accountName, string password)
+    {
+        SRPAuthenticationService srpAuthenticationService = new (webApplicationFactory);
+
+        (Account account, string _) = await srpAuthenticationService.CreateAccountWithSRPCredentials(emailAddress, accountName, password);
+
+        SRPAuthenticationData result = await srpAuthenticationService.PerformFullAuthentication(account, password, "||||", "||||");
+
+        await Assert.That(result.Success).IsTrue();
+
+        using IServiceScope scope = webApplicationFactory.Services.CreateScope();
+
+        MerrickContext databaseContext = scope.ServiceProvider.GetRequiredService<MerrickContext>();
+
+        Account databaseAccount = await databaseContext.Accounts.SingleAsync(candidate => candidate.ID == account.ID);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(databaseAccount.MACAddressCollection).IsEmpty();
+            await Assert.That(databaseAccount.SystemInformationCollection).IsEmpty();
+            await Assert.That(databaseAccount.SystemInformationHashCollection).IsEmpty();
+        }
+    }
+
+    [Test]
+    [Arguments("unavailablehash@kongor.com", "UnavailableHash", "SecurePassword123!")]
+    public async Task Authenticate_With_SRP_With_Unavailable_Windows_System_Information_And_Not_Obtainable_Hash_Returns_Success(
+        string emailAddress, string accountName, string password)
+    {
+        SRPAuthenticationService srpAuthenticationService = new (webApplicationFactory);
+
+        (Account account, string _) = await srpAuthenticationService.CreateAccountWithSRPCredentials(emailAddress, accountName, password);
+
+        SRPAuthenticationData result = await srpAuthenticationService.PerformFullAuthentication(account, password, "||||", "not obtainable");
+
+        await Assert.That(result.Success).IsTrue();
+
+        using IServiceScope scope = webApplicationFactory.Services.CreateScope();
+
+        MerrickContext databaseContext = scope.ServiceProvider.GetRequiredService<MerrickContext>();
+
+        Account databaseAccount = await databaseContext.Accounts.SingleAsync(candidate => candidate.ID == account.ID);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(databaseAccount.MACAddressCollection).IsEmpty();
+            await Assert.That(databaseAccount.SystemInformationCollection).IsEmpty();
+            await Assert.That(databaseAccount.SystemInformationHashCollection).IsEquivalentTo(["not obtainable"]);
+        }
+    }
+
+    [Test]
+    [Arguments("threepipes@kongor.com", "ThreePipes", "SecurePassword123!", "|||")]
+    [Arguments("fivepipes@kongor.com", "FivePipes", "SecurePassword123!", "|||||")]
+    [Arguments("partialhardware@kongor.com", "PartialHW", "SecurePassword123!", "MAC||||")]
+    public async Task Authenticate_With_SRP_With_Malformed_Windows_System_Information_Remains_Rejected(
+        string emailAddress, string accountName, string password, string systemInformation)
+    {
+        SRPAuthenticationService srpAuthenticationService = new (webApplicationFactory);
+
+        (Account account, string _) = await srpAuthenticationService.CreateAccountWithSRPCredentials(emailAddress, accountName, password);
+
+        SRPAuthenticationData result = await srpAuthenticationService.PerformFullAuthentication(account, password, systemInformation);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.Success).IsFalse();
+            await Assert.That(result.ErrorMessage).IsEqualTo("Incorrect System Information Format");
+        }
+    }
+
+    [Test]
     [Arguments("preauth1@kongor.com", "PreAuth1", "SecurePassword123!")]
     [Arguments("preauth2@kongor.net", "PreAuth2", "MyP@ssw0rd!")]
     public async Task Perform_Pre_Authentication_With_Valid_Account_Returns_Session_Data_And_Server_Ephemeral(string emailAddress, string accountName, string password)

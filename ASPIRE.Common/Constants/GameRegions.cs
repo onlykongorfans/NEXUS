@@ -37,7 +37,8 @@ public static class GameRegions
         ["ID"]  = "SEA",
         ["CN"]  = "SEA",
         ["KR"]  = "SEA",
-        ["AU"]  = "SEA"
+
+        ["AU"]  = "AU"
     };
 
     /// <summary>

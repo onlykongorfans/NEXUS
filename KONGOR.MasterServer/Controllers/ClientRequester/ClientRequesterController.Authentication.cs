@@ -29,8 +29,15 @@ public partial class ClientRequesterController
         if (account is null)
             return NotFound(PhpSerialization.Serialize(new SRPAuthenticationFailureResponse(SRPAuthenticationFailureReason.AccountNotFound)));
 
-        if (account.Type is AccountType.Disabled)
+        if (IsAccountUnavailableForClientAuthentication(account))
             return Unauthorized(PhpSerialization.Serialize(new SRPAuthenticationFailureResponse(SRPAuthenticationFailureReason.AccountIsDisabled, account.NameWithClanTag)));
+
+        if (AuthenticationAttemptLimiter.RequestIsAllowed(account.Name) is false)
+        {
+            Logger.LogWarning(@"Account ""{AccountName}"" Exceeded The Account-Scoped Authentication Attempt Limit", account.Name);
+
+            return StatusCode(StatusCodes.Status429TooManyRequests, PhpSerialization.Serialize(new SRPAuthenticationFailureResponse(SRPAuthenticationFailureReason.TooManyAttempts)));
+        }
 
         User user = account.User;
 
@@ -137,6 +144,9 @@ public partial class ClientRequesterController
         if (account is null)
             return NotFound(PhpSerialization.Serialize(new SRPAuthenticationFailureResponse(SRPAuthenticationFailureReason.AccountNotFound)));
 
+        if (IsAccountUnavailableForClientAuthentication(account))
+            return Unauthorized(PhpSerialization.Serialize(new SRPAuthenticationFailureResponse(SRPAuthenticationFailureReason.AccountIsDisabled, account.NameWithClanTag)));
+
         if (account.Type is AccountType.ServerHost)
             return Unauthorized(PhpSerialization.Serialize(new SRPAuthenticationFailureResponse(SRPAuthenticationFailureReason.IsServerHostingAccount)));
 
@@ -166,11 +176,20 @@ public partial class ClientRequesterController
             /*
                 Stage One (pre_auth) System Information Format:
                   - Windows: "MAC|OS|Processor|Video|RAM" (five pipe-separated data points)
+                  - Windows (hardware information unavailable): "||||" (five empty data points)
                   - Linux/macOS: "not running on windows" (plain string)
             */
-            bool isNonWindowsClient = systemInformation.Equals("not running on windows", StringComparison.Ordinal);
+            const string UnavailableWindowsSystemInformation = "||||";
 
-            if (isNonWindowsClient)
+            bool isNonWindowsClient = systemInformation.Equals("not running on windows", StringComparison.Ordinal);
+            bool isWindowsSystemInformationUnavailable = systemInformation.Equals(UnavailableWindowsSystemInformation, StringComparison.Ordinal);
+
+            if (isWindowsSystemInformationUnavailable)
+            {
+                Logger.LogWarning(@"Account ""{AccountName}"" Reported Unavailable Windows System Information", account.NameWithClanTag);
+            }
+
+            else if (isNonWindowsClient)
             {
                 if (account.SystemInformationCollection.Contains(systemInformation).Equals(false))
                     account.SystemInformationCollection.Add(systemInformation);
@@ -201,17 +220,23 @@ public partial class ClientRequesterController
                 Stage Two (srpAuth) System Information Hashes Format:
                   - All Platforms (HWID obtained): "hash|hash|hash|hash|hash" (same HWID hash repeated 5 times, likely a bug)
                   - All Platforms (HWID not obtained): "not obtainable" (plain string)
+                  - Windows compatibility fallback: "||||" when stage one also reported "||||"
             */
-            string? systemInformationHash = systemInformationHashes.Split('|', StringSplitOptions.RemoveEmptyEntries).Distinct().SingleOrDefault();
+            bool areWindowsSystemInformationHashesUnavailable = isWindowsSystemInformationUnavailable
+                && systemInformationHashes.Equals(UnavailableWindowsSystemInformation, StringComparison.Ordinal);
 
-            if (systemInformationHash is null)
+            string? systemInformationHash = areWindowsSystemInformationHashesUnavailable
+                ? null
+                : systemInformationHashes.Split('|', StringSplitOptions.RemoveEmptyEntries).Distinct().SingleOrDefault();
+
+            if (systemInformationHash is null && areWindowsSystemInformationHashesUnavailable is false)
             {
                 Logger.LogError($@"Account ""{account.NameWithClanTag}"" Has Made A Request To Log In Using Unexpected System Information Hashes ""{systemInformationHashes}""");
 
                 return BadRequest(PhpSerialization.Serialize(new SRPAuthenticationFailureResponse(SRPAuthenticationFailureReason.IncorrectSystemInformationFormat)));
             }
 
-            if (account.SystemInformationHashCollection.Contains(systemInformationHash).Equals(false))
+            if (systemInformationHash is not null && account.SystemInformationHashCollection.Contains(systemInformationHash).Equals(false))
                 account.SystemInformationHashCollection.Add(systemInformationHash);
 
             await MerrickContext.SaveChangesAsync();
@@ -262,6 +287,14 @@ public partial class ClientRequesterController
 
         return BadRequest(response);
     }
+
+    /// <summary>
+    ///     Prevents explicitly disabled accounts in every environment and prevents built-in quick-play guest accounts from authenticating in Production.
+    ///     The separately privileged MODERATOR account remains available after its shared built-in user password has been rotated during Production startup.
+    /// </summary>
+    private bool IsAccountUnavailableForClientAuthentication(Account account)
+        => account.Type is AccountType.Disabled
+            || (HostEnvironment.IsProduction() && account.Type is AccountType.Guest);
 
     [GeneratedRegex(@"(?>S2 Games)\/(?>Heroes [oO]f Newerth)\/(?<version>\d{1,2}\.\d{1,2}\.\d{1,2}\.\d{1,2})\/(?<platform>[wlm]a[cs])\/(?<architecture>x86_64|x86-biarch|universal-64)")]
     private static partial Regex UserAgentRegex();

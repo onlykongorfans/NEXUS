@@ -53,7 +53,7 @@ public sealed class JWTAuthenticationService(ZORGATHIntegrationWebApplicationFac
 
         MerrickContext merrickContext = scope.ServiceProvider.GetRequiredService<MerrickContext>();
 
-        UserController controller = new (merrickContext, logger, emailService, configuration, hostEnvironment);
+        UserController controller = new (merrickContext, logger, emailService, configuration, hostEnvironment, scope.ServiceProvider.GetRequiredService<AuthenticationAttemptLimiter>());
 
         IActionResult response = await controller.RegisterUserAndMainAccount(
             new RegisterUserAndMainAccountDTO(tokenValue, accountName, password, password));
@@ -77,7 +77,7 @@ public sealed class JWTAuthenticationService(ZORGATHIntegrationWebApplicationFac
 
         MerrickContext merrickContext = scope.ServiceProvider.GetRequiredService<MerrickContext>();
 
-        UserController controller = new (merrickContext, logger, emailService, configuration, hostEnvironment);
+        UserController controller = new (merrickContext, logger, emailService, configuration, hostEnvironment, scope.ServiceProvider.GetRequiredService<AuthenticationAttemptLimiter>());
 
         IActionResult response = await controller.LogInUser(new LogInUserDTO(accountName, password));
 

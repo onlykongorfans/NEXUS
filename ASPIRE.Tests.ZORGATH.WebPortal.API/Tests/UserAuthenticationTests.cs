@@ -66,7 +66,7 @@ public sealed class UserAuthenticationTests(ZORGATHIntegrationWebApplicationFact
 
         MerrickContext databaseContext = scope.ServiceProvider.GetRequiredService<MerrickContext>();
 
-        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment);
+        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment, scope.ServiceProvider.GetRequiredService<AuthenticationAttemptLimiter>());
 
         IActionResult response = await userController.LogInUser(new LogInUserDTO(accountName, password));
 
@@ -91,7 +91,7 @@ public sealed class UserAuthenticationTests(ZORGATHIntegrationWebApplicationFact
 
         MerrickContext databaseContext = scope.ServiceProvider.GetRequiredService<MerrickContext>();
 
-        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment);
+        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment, scope.ServiceProvider.GetRequiredService<AuthenticationAttemptLimiter>());
 
         IActionResult response = await userController.LogInUser(new LogInUserDTO(accountName, wrongPassword));
 
@@ -180,7 +180,7 @@ public sealed class UserAuthenticationTests(ZORGATHIntegrationWebApplicationFact
 
         MerrickContext databaseContext = scope.ServiceProvider.GetRequiredService<MerrickContext>();
 
-        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment);
+        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment, scope.ServiceProvider.GetRequiredService<AuthenticationAttemptLimiter>());
 
         IActionResult response = await userController.LogInUser(new LogInUserDTO(loginAccountName, password));
 
@@ -205,7 +205,7 @@ public sealed class UserAuthenticationTests(ZORGATHIntegrationWebApplicationFact
 
         MerrickContext databaseContext = scope.ServiceProvider.GetRequiredService<MerrickContext>();
 
-        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment);
+        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment, scope.ServiceProvider.GetRequiredService<AuthenticationAttemptLimiter>());
 
         IActionResult response = await userController.LogInUser(new LogInUserDTO(loginAccountName, password));
 

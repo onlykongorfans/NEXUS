@@ -1,7 +1,7 @@
 {
     "SignupRewards": {
-        "GoldCoins": 2500,
-        "SilverCoins": 25000,
+        "GoldCoins": 20000,
+        "SilverCoins": 40000,
         "PlinkoTickets": 250
     },
     "EventRewards": {

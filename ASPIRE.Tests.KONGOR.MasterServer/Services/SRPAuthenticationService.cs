@@ -58,7 +58,9 @@ public sealed class SRPAuthenticationService(KONGORIntegrationWebApplicationFact
     /// <summary>
     ///     Performs the complete SRP authentication flow without creating an account first.
     /// </summary>
-    public async Task<SRPAuthenticationData> PerformFullAuthentication(Account account, string password)
+    public async Task<SRPAuthenticationData> PerformFullAuthentication(Account account, string password,
+        string systemInformation = "MAC123|system|info|data|testhash",
+        string systemInformationHashes = "testhash|testhash|testhash|testhash|testhash")
     {
         using IServiceScope scope = webApplicationFactory.Services.CreateScope();
 
@@ -88,7 +90,7 @@ public sealed class SRPAuthenticationService(KONGORIntegrationWebApplicationFact
         {
             { "login", account.Name },
             { "A", clientEphemeral.Public },
-            { "SysInfo", "MAC123|system|info|data|testhash" }
+            { "SysInfo", systemInformation }
         };
 
         FormUrlEncodedContent preAuthContent = new (preAuthFormData);
@@ -132,7 +134,7 @@ public sealed class SRPAuthenticationService(KONGORIntegrationWebApplicationFact
             { "MajorVersion", "4" },
             { "MinorVersion", "10" },
             { "MicroVersion", "1" },
-            { "SysInfo", "testhash|testhash|testhash|testhash|testhash" }
+            { "SysInfo", systemInformationHashes }
         };
 
         FormUrlEncodedContent authContent = new (authFormData);

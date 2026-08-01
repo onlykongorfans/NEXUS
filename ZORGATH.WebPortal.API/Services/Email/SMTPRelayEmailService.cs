@@ -1,17 +1,19 @@
 namespace ZORGATH.WebPortal.API.Services.Email;
 
 /// <summary>
-///     Production email service implementation that sends emails via AWS SES SMTP with StartTLS and authentication.
+///     Production email service implementation that sends emails through an authenticated SMTP relay.
 /// </summary>
-public class AWSSESEmailService(IOptions<OperationalConfiguration> configuration, ILogger<AWSSESEmailService> logger) : IEmailService
+public class SMTPRelayEmailService(IOptions<OperationalConfiguration> configuration, ILogger<SMTPRelayEmailService> logger) : IEmailService
 {
+    private string PublicPortalBaseURL { get; } = configuration.Value.PublicPortalBaseURL.TrimEnd('/');
+
     private OperationalConfigurationSMTP SMTPConfiguration { get; } = configuration.Value.SMTP;
 
     private ILogger Logger { get; } = logger;
 
     public async Task<bool> SendEmailAddressRegistrationLink(string emailAddress, string token)
     {
-        string link = "https://portal.kongor.net/account/register/" + token;
+        string link = $"{PublicPortalBaseURL}/account/register/{token}";
 
         const string subject = "Verify Email Address";
 
@@ -38,9 +40,9 @@ public class AWSSESEmailService(IOptions<OperationalConfiguration> configuration
         return await SendEmail(emailAddress, subject, body);
     }
 
-    public async Task<bool> SendAccountPasswordResetLink(string emailAddress, string token, string generatedPassword, List<string> accountNames)
+    public async Task<bool> SendAccountPasswordResetLink(string emailAddress, string token, List<string> accountNames)
     {
-        string link = "https://portal.kongor.net/password/recover/" + token;
+        string link = $"{PublicPortalBaseURL}/password/recover/{token}";
 
         const string subject = "Reset Forgotten Password";
 
@@ -51,8 +53,7 @@ public class AWSSESEmailService(IOptions<OperationalConfiguration> configuration
         string body = "A password reset has been requested for an account that is registered with this email address."
                       + Environment.NewLine + "If you did not make this request, please ignore this message."
                       + Environment.NewLine + Environment.NewLine + accountNamesBody
-                      + Environment.NewLine + $@"Your new password will be: ""{generatedPassword}"""
-                      + Environment.NewLine + Environment.NewLine + "Please follow the link below to confirm and activate this new password:"
+                      + Environment.NewLine + Environment.NewLine + "Please follow the link below to choose a new password:"
                       + Environment.NewLine + Environment.NewLine + link
                       + Environment.NewLine + Environment.NewLine + "Regards,"
                       + Environment.NewLine + "The Project KONGOR Team";
@@ -74,7 +75,7 @@ public class AWSSESEmailService(IOptions<OperationalConfiguration> configuration
 
     public async Task<bool> SendAccountPasswordUpdateLink(string emailAddress, string token, List<string> accountNames)
     {
-        string link = "https://portal.kongor.net/password/update/" + token;
+        string link = $"{PublicPortalBaseURL}/password/update/{token}";
 
         const string subject = "Confirm Password Update";
 
@@ -107,7 +108,7 @@ public class AWSSESEmailService(IOptions<OperationalConfiguration> configuration
 
     public async Task<bool> SendEmailAddressUpdateLink(string emailAddress, string token)
     {
-        string link = "https://portal.kongor.net/email/update/" + token;
+        string link = $"{PublicPortalBaseURL}/email/update/{token}";
 
         const string subject = "Update Email Address";
 
@@ -145,49 +146,46 @@ public class AWSSESEmailService(IOptions<OperationalConfiguration> configuration
 
         if (string.IsNullOrWhiteSpace(SMTPConfiguration.Host))
         {
-            Logger.LogError("Failed To Send Email To {RecipientEmailAddress} Using AWS SES: SMTP Host Is Not Configured", emailAddress);
+            Logger.LogError("Failed To Send Email To {RecipientEmailAddress} Using The SMTP Relay: SMTP Host Is Not Configured", emailAddress);
 
             return false;
         }
 
         if (SMTPConfiguration.Port is null)
         {
-            Logger.LogError("Failed To Send Email To {RecipientEmailAddress} Using AWS SES: SMTP Port Is Not Configured", emailAddress);
+            Logger.LogError("Failed To Send Email To {RecipientEmailAddress} Using The SMTP Relay: SMTP Port Is Not Configured", emailAddress);
 
             return false;
         }
 
         if (string.IsNullOrWhiteSpace(SMTPConfiguration.Username) || string.IsNullOrWhiteSpace(SMTPConfiguration.Password))
         {
-            Logger.LogError("Failed To Send Email To {RecipientEmailAddress} Using AWS SES: SMTP Credentials Are Not Configured", emailAddress);
+            Logger.LogError("Failed To Send Email To {RecipientEmailAddress} Using The SMTP Relay: SMTP Credentials Are Not Configured", emailAddress);
 
             return false;
         }
 
         try
         {
-            await client.ConnectAsync(SMTPConfiguration.Host, SMTPConfiguration.Port.Value, MailKit.Security.SecureSocketOptions.StartTls);
+            MailKit.Security.SecureSocketOptions secureSocketOptions = SMTPConfiguration.UseTLS
+                ? MailKit.Security.SecureSocketOptions.StartTls
+                : MailKit.Security.SecureSocketOptions.None;
+
+            await client.ConnectAsync(SMTPConfiguration.Host, SMTPConfiguration.Port.Value, secureSocketOptions);
 
             await client.AuthenticateAsync(SMTPConfiguration.Username, SMTPConfiguration.Password);
 
             string response = await client.SendAsync(message);
 
-            // AWS SES Returns A Response Starting With "Ok" On Success (e.g. "Ok 010b018307ef6101-59cfc741-dcbf-44a5-a935-b76452b87bf3-000000")
-            if (response.StartsWith("OK", StringComparison.OrdinalIgnoreCase))
-            {
-                Logger.LogDebug("Email Sent To {RecipientEmailAddress} Using AWS SES: {Subject}", emailAddress, subject);
+            // MailKit Throws An Exception When The Relay Rejects A Message, So Any Returned Response Represents A Successful Submission.
+            Logger.LogDebug("Email Sent To {RecipientEmailAddress} Using The SMTP Relay: {Subject}; Relay Response: {Response}", emailAddress, subject, response);
 
-                return true;
-            }
-
-            Logger.LogError("Email Sending Failure Using AWS SES To {RecipientEmailAddress}: {Response}", emailAddress, response);
-
-            return false;
+            return true;
         }
 
         catch (Exception exception)
         {
-            Logger.LogError(exception, "Failed To Send Email To {RecipientEmailAddress} Using AWS SES", emailAddress);
+            Logger.LogError(exception, "Failed To Send Email To {RecipientEmailAddress} Using The SMTP Relay", emailAddress);
 
             return false;
         }

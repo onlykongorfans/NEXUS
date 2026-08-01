@@ -11,6 +11,9 @@ public sealed class ZORGATHIntegrationWebApplicationFactory(ServiceContainerCont
     {
         // Production Reads These Via Environment.GetEnvironmentVariable Rather Than IConfiguration, So builder.UseSetting Would Not Reach Them.
         Environment.SetEnvironmentVariable("INFRASTRUCTURE_GATEWAY", "localhost");
+
+        // Production's Real Signing Key Is Injected At Deployment Time And Is Intentionally Absent From Tracked Configuration
+        builder.UseSetting("Operational:JWT:SigningKey", "integration-test-signing-key-that-is-not-used-outside-the-test-process-2026");
     }
 
     protected override void ConfigureAdditionalServices(IServiceCollection services)

@@ -29,45 +29,27 @@ public static class EmailAddressHelpers
 
     private static IActionResult SanitiseEmailAddress(string email, IWebHostEnvironment hostEnvironment)
     {
-        if (hostEnvironment.IsDevelopment() is false)
-        {
-            if (email.Split('@').First().Contains('+'))
-                return new BadRequestObjectResult(@"Alias Creating Character ""+"" Is Not Allowed");
+        string candidate = email.Trim();
 
-            string[] allowedEmailProviders = Enumerable.Empty<string>()
-                .Concat(["outlook", "hotmail", "live", "msn"]) // Microsoft Outlook
-                .Concat(["protonmail", "proton"]) // Proton Mail
-                .Concat(["gmail", "googlemail"]) // Google Mail
-                .Concat(["yahoo", "rocketmail", "ymail"]) // Yahoo Mail
-                .Concat(["aol", "yandex", "gmx", "mail"]) // AOL Mail, Yandex Mail, GMX Mail, mail.com
-                .Concat(["icloud", "me", "mac"]) // iCloud Mail
-                .ToArray();
+        // Require A Bare Mailbox Address; Display Names And Other RFC Mailbox List Syntax Are Not Valid Account Identifiers
+        if (MailboxAddress.TryParse(candidate, out MailboxAddress? mailboxAddress).Equals(false)
+            || mailboxAddress is null
+            || mailboxAddress.Address.Equals(candidate, StringComparison.OrdinalIgnoreCase).Equals(false))
+            return new BadRequestObjectResult($@"Email Address ""{email}"" Is Not Valid");
 
-            Regex pattern = new (@"^(?<local>[a-zA-Z0-9_\-.]+)@(?<domain>[a-zA-Z]+)\.(?<tld>[a-zA-Z]{1,3}|co.uk)$");
+        string parsedAddress = mailboxAddress.Address;
+        int domainSeparatorIndex = parsedAddress.LastIndexOf('@');
 
-            Match match = pattern.Match(email);
+        if (domainSeparatorIndex <= 0 || domainSeparatorIndex == parsedAddress.Length - 1)
+            return new BadRequestObjectResult($@"Email Address ""{email}"" Is Not Valid");
 
-            if (match.Success.Equals(false))
-                return new BadRequestObjectResult($@"Email Address ""{email}"" Is Not Valid");
-
-            string local = match.Groups["local"].Value;
-            string domain = match.Groups["domain"].Value;
-            string tld = match.Groups["tld"].Value;
-
-            if (allowedEmailProviders.Contains(domain).Equals(false))
-                return new BadRequestObjectResult($@"Email Address Provider ""{domain}"" Is Not Allowed");
-
-            // These Email Providers Ignore Period Characters
-            // Users Can Create Aliases With The Same Email Address By Simply Adding Some Period Characters To The Local Part
-            if (domain is "protonmail" or "proton" or "gmail" or "googlemail")
-                local = local.Replace(".", string.Empty);
-
-            email = $"{local}@{domain}.{tld}";
-        }
+        string localPart = parsedAddress[..domainSeparatorIndex];
+        string domain = parsedAddress[(domainSeparatorIndex + 1)..].ToLowerInvariant();
 
         return new ContentResult
         {
-            Content = email
+            // Domain Names Are Case-Insensitive, But Some Providers Treat Mailbox Local Parts As Case-Sensitive
+            Content = $"{localPart}@{domain}"
         };
     }
 }

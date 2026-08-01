@@ -55,6 +55,28 @@ public sealed class ServerListRegionFilteringTests
     }
 
     [Test]
+    public async Task An_AU_Region_Request_Does_Not_Return_A_South_East_Asian_Server()
+    {
+        const int AustraliaServerID = 10;
+        const int SingaporeServerID = 11;
+
+        List<MatchServer> servers =
+        [
+            BuildServer(AustraliaServerID, "AU"),
+            BuildServer(SingaporeServerID, "SG")
+        ];
+
+        ServerForCreateListResponse response = new (servers, "AU", cookie: "test-cookie");
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(response.Servers.ContainsKey(AustraliaServerID)).IsTrue();
+            await Assert.That(response.Servers.ContainsKey(SingaporeServerID)).IsFalse();
+            await Assert.That(response.Servers.Count).IsEqualTo(1);
+        }
+    }
+
+    [Test]
     public async Task An_Unmapped_Region_Request_Returns_Only_The_Wildcard_Servers()
     {
         ServerForCreateListResponse response = BuildResponse("TOUR");

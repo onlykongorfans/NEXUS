@@ -16,9 +16,9 @@ public interface IEmailService
     Task<bool> SendEmailAddressRegistrationConfirmation(string emailAddress, string accountName);
 
     /// <summary>
-    ///     Sends an email containing a generated random password and a confirmation link for the user to activate the reset.
+    ///     Sends an email containing a single-use link where the user can choose a new password.
     /// </summary>
-    Task<bool> SendAccountPasswordResetLink(string emailAddress, string token, string generatedPassword, List<string> accountNames);
+    Task<bool> SendAccountPasswordResetLink(string emailAddress, string token, List<string> accountNames);
 
     /// <summary>
     ///     Sends a confirmation email after the user has successfully confirmed their account password reset.

@@ -21,7 +21,8 @@ internal static class RegionProximity
         ["US"]  = -6.5,
         ["LAT"] = -4.5,
         ["EU"]  =  1.5,
-        ["SEA"] =  8.5
+        ["SEA"] =  8.5,
+        ["AU"]  = 10.0
     };
 
     /// <summary>

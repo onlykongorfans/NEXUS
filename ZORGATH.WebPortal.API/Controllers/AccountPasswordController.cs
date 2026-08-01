@@ -27,45 +27,47 @@ public class AccountPasswordController(MerrickContext databaseContext, ILogger<A
         // Always Return Success To Prevent Email Enumeration Attacks
         const string successMessage = "Account Password Reset Token Was Successfully Issued";
 
-        List<string> accountNames = await MerrickContext.Users
-            .Where(user => user.EmailAddress.Equals(sanitisedEmailAddress))
-            .SelectMany(user => user.Accounts.Select(account => account.Name))
-            .ToListAsync();
+        User? user = await MerrickContext.Users
+            .Include(candidate => candidate.Accounts)
+            .SingleOrDefaultAsync(candidate => candidate.EmailAddress.Equals(sanitisedEmailAddress));
 
         // Do Not Send An Email If There Are No Accounts Linked To The Email Address
-        if (accountNames.Count is 0)
+        if (user is null || user.Accounts.Count is 0)
+            return Ok(successMessage);
+
+        // Preserve Enumeration Resistance While Requiring Externally Managed Built-In Credentials To Be Changed At Their Authoritative Secret Source
+        if (HostEnvironment.IsProduction() && ConfigurationManagedUserHelpers.IsConfigurationManaged(user))
             return Ok(successMessage);
 
         Token? existingToken = await MerrickContext.Tokens.SingleOrDefaultAsync(token =>
             token.Purpose.Equals(TokenPurpose.AccountPasswordReset)
-            && token.EmailAddress.Equals(payload.EmailAddress)
+            && token.EmailAddress.Equals(sanitisedEmailAddress)
             && token.TimestampConsumed == null);
 
         if (existingToken is not null)
-            return Ok(successMessage);
+        {
+            if (existingToken.IsExpiredAt(DateTimeOffset.UtcNow).Equals(false))
+                return Ok(successMessage);
 
-        // Generate A Random Password And Pre-Compute The Hashes
-        string generatedPassword = AccountPasswordGenerationHelpers.GenerateRandomPassword();
-
-        string salt = SRPRegistrationHandlers.GenerateSRPPasswordSalt();
-        string srpHash = SRPRegistrationHandlers.ComputeSRPPasswordHash(generatedPassword, salt);
-        string pbkdf2Hash = new PasswordHasher<User>().HashPassword(null!, generatedPassword);
-
-        AccountPasswordTokenData tokenData = new (sanitisedEmailAddress, salt, srpHash, pbkdf2Hash);
+            // Remove The Expired Token Immediately So The User Does Not Need To Wait For The Hourly Cleanup Pass Before Requesting Another Link
+            MerrickContext.Tokens.Remove(existingToken);
+        }
 
         Token token = new ()
         {
             Purpose = TokenPurpose.AccountPasswordReset,
-            EmailAddress = payload.EmailAddress,
+            EmailAddress = sanitisedEmailAddress,
             Value = Guid.CreateVersion7(),
-            Data = JsonSerializer.Serialize(tokenData),
+            Data = sanitisedEmailAddress,
             Validity = TimeSpan.FromHours(1)
         };
 
         await MerrickContext.Tokens.AddAsync(token);
         await MerrickContext.SaveChangesAsync();
 
-        bool sent = await EmailService.SendAccountPasswordResetLink(payload.EmailAddress, token.Value.ToString(), generatedPassword, accountNames);
+        List<string> accountNames = user.Accounts.Select(account => account.Name).ToList();
+
+        bool sent = await EmailService.SendAccountPasswordResetLink(user.EmailAddress, token.Value.ToString(), accountNames);
 
         if (sent.Equals(false))
         {
@@ -81,9 +83,23 @@ public class AccountPasswordController(MerrickContext databaseContext, ILogger<A
     [HttpPost("Reset/Confirm", Name = "Confirm Account Password Reset")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(IEnumerable<string>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ConfirmAccountPasswordReset(ConfirmAccountPasswordResetDTO payload)
     {
+        if (payload.Password.Equals(payload.ConfirmPassword).Equals(false))
+            return BadRequest($@"Password ""{payload.ConfirmPassword}"" Does Not Match ""{payload.Password}"" (These Values Are Only Visible To You)");
+
+        // Validate Password Strength In Non-Development Environments
+        if (HostEnvironment.IsDevelopment() is false)
+        {
+            ValidationResult passwordValidationResult = await new PasswordValidator().ValidateAsync(payload.Password);
+
+            if (passwordValidationResult.IsValid is false)
+                return BadRequest(passwordValidationResult.Errors.Select(error => error.ErrorMessage));
+        }
+
         Token? token = await MerrickContext.Tokens.SingleOrDefaultAsync(token =>
             token.Value.ToString().Equals(payload.Token)
             && token.Purpose.Equals(TokenPurpose.AccountPasswordReset)
@@ -92,23 +108,32 @@ public class AccountPasswordController(MerrickContext databaseContext, ILogger<A
         if (token is null)
             return NotFound($@"Account Password Reset Token ""{payload.Token}"" Was Not Found");
 
-        AccountPasswordTokenData? tokenData = JsonSerializer.Deserialize<AccountPasswordTokenData>(token.Data);
-
-        if (tokenData is null)
+        if (token.IsExpiredAt(DateTimeOffset.UtcNow))
         {
-            Logger.LogError(@"[BUG] Failed To Deserialise Account Password Token Data For Token ""{Token}""", payload.Token);
+            MerrickContext.Tokens.Remove(token);
+            await MerrickContext.SaveChangesAsync();
 
-            return UnprocessableEntity("Failed To Process Account Password Reset Token");
+            return BadRequest($@"Account Password Reset Token ""{payload.Token}"" Has Expired");
         }
 
-        User? user = await MerrickContext.Users.Include(user => user.Accounts).SingleOrDefaultAsync(user => user.EmailAddress.Equals(tokenData.SanitizedEmailAddress));
+        User? user = await MerrickContext.Users.Include(user => user.Accounts).SingleOrDefaultAsync(user => user.EmailAddress.Equals(token.Data));
 
         if (user is null)
             return NotFound($@"User With Email Address ""{token.EmailAddress}"" Was Not Found");
 
-        user.SRPPasswordSalt = tokenData.SRPPasswordSalt;
-        user.SRPPasswordHash = tokenData.SRPPasswordHash;
-        user.PBKDF2PasswordHash = tokenData.PBKDF2PasswordHash;
+        if (HostEnvironment.IsProduction() && ConfigurationManagedUserHelpers.IsConfigurationManaged(user))
+        {
+            MerrickContext.Tokens.Remove(token);
+            await MerrickContext.SaveChangesAsync();
+
+            return StatusCode(StatusCodes.Status403Forbidden, "Configuration-Managed Production Passwords Must Be Changed At Their Authoritative Secret Source");
+        }
+
+        string salt = SRPPasswordHandlers.GenerateSRPPasswordSalt();
+
+        user.SRPPasswordSalt = salt;
+        user.SRPPasswordHash = SRPPasswordHandlers.ComputeSRPPasswordHash(payload.Password, salt);
+        user.PBKDF2PasswordHash = new PasswordHasher<User>().HashPassword(user, payload.Password);
 
         token.TimestampConsumed = DateTimeOffset.UtcNow;
 
@@ -130,6 +155,7 @@ public class AccountPasswordController(MerrickContext databaseContext, ILogger<A
     [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(IEnumerable<string>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(string), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(string), StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> RequestAccountPasswordUpdate(RequestAccountPasswordUpdateDTO payload)
@@ -153,14 +179,17 @@ public class AccountPasswordController(MerrickContext databaseContext, ILogger<A
         if (user is null)
             return NotFound($@"User With Email Address ""{userEmailAddress}"" Was Not Found");
 
+        if (HostEnvironment.IsProduction() && ConfigurationManagedUserHelpers.IsConfigurationManaged(user))
+            return StatusCode(StatusCodes.Status403Forbidden, "Configuration-Managed Production Passwords Must Be Changed At Their Authoritative Secret Source");
+
         PasswordVerificationResult passwordVerificationResult = new PasswordHasher<User>().VerifyHashedPassword(user, user.PBKDF2PasswordHash, payload.CurrentPassword);
 
         if (passwordVerificationResult is not PasswordVerificationResult.Success)
             return Unauthorized("The Submitted Current Password Is Incorrect");
 
         // Pre-Compute The New Password Hashes
-        string salt = SRPRegistrationHandlers.GenerateSRPPasswordSalt();
-        string srpHash = SRPRegistrationHandlers.ComputeSRPPasswordHash(payload.Password, salt);
+        string salt = SRPPasswordHandlers.GenerateSRPPasswordSalt();
+        string srpHash = SRPPasswordHandlers.ComputeSRPPasswordHash(payload.Password, salt);
         string pbkdf2Hash = new PasswordHasher<User>().HashPassword(user, payload.Password);
 
         AccountPasswordTokenData tokenData = new (userEmailAddress, salt, srpHash, pbkdf2Hash);
@@ -204,6 +233,7 @@ public class AccountPasswordController(MerrickContext databaseContext, ILogger<A
     [HttpPost("Update/Confirm", Name = "Confirm Account Password Update")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ConfirmAccountPasswordUpdate(ConfirmAccountPasswordUpdateDTO payload)
     {
@@ -214,6 +244,14 @@ public class AccountPasswordController(MerrickContext databaseContext, ILogger<A
 
         if (token is null)
             return NotFound($@"Account Password Update Token ""{payload.Token}"" Was Not Found");
+
+        if (token.IsExpiredAt(DateTimeOffset.UtcNow))
+        {
+            MerrickContext.Tokens.Remove(token);
+            await MerrickContext.SaveChangesAsync();
+
+            return BadRequest($@"Account Password Update Token ""{payload.Token}"" Has Expired");
+        }
 
         AccountPasswordTokenData? tokenData = JsonSerializer.Deserialize<AccountPasswordTokenData>(token.Data);
 
@@ -228,6 +266,14 @@ public class AccountPasswordController(MerrickContext databaseContext, ILogger<A
 
         if (user is null)
             return NotFound($@"User With Email Address ""{token.EmailAddress}"" Was Not Found");
+
+        if (HostEnvironment.IsProduction() && ConfigurationManagedUserHelpers.IsConfigurationManaged(user))
+        {
+            MerrickContext.Tokens.Remove(token);
+            await MerrickContext.SaveChangesAsync();
+
+            return StatusCode(StatusCodes.Status403Forbidden, "Configuration-Managed Production Passwords Must Be Changed At Their Authoritative Secret Source");
+        }
 
         user.SRPPasswordSalt = tokenData.SRPPasswordSalt;
         user.SRPPasswordHash = tokenData.SRPPasswordHash;

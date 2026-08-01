@@ -7,6 +7,8 @@ public class OperationalConfiguration
     public required OperationalConfigurationJWT JWT { get; set; }
 
     public required OperationalConfigurationSMTP SMTP { get; set; }
+
+    public required string PublicPortalBaseURL { get; set; }
 }
 
 public class OperationalConfigurationJWT

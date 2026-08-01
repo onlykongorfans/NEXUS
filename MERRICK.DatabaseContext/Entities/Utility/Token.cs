@@ -22,6 +22,12 @@ public class Token
     ///     After this window elapses, the token is considered expired and is purged by the token cleanup service.
     /// </summary>
     public required TimeSpan Validity { get; set; }
+
+    /// <summary>
+    ///     Determines whether this token can no longer be redeemed at the supplied point in time.
+    /// </summary>
+    public bool IsExpiredAt(DateTimeOffset timestamp)
+        => TimestampCreated + Validity < timestamp;
 }
 
 public enum TokenPurpose

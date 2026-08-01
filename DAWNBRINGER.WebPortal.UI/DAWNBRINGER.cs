@@ -60,8 +60,31 @@ public class DAWNBRINGER
         // Add Cascading Authentication State For The Entire Application
         builder.Services.AddCascadingAuthenticationState();
 
+        // Configure Forwarded Headers For Reverse Proxy Support
+        builder.Services.Configure<ForwardedHeadersOptions>(options =>
+        {
+            string proxy = Environment.GetEnvironmentVariable("INFRASTRUCTURE_GATEWAY") ?? throw new NullReferenceException("Infrastructure Gateway Is NULL");
+
+            options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
+
+            IPAddress[] proxyResolvedAddresses;
+
+            try { proxyResolvedAddresses = Dns.GetHostAddresses(proxy); }
+            catch (Exception exception) { throw new InvalidOperationException($@"Failed To Resolve Proxy Host ""{proxy}""", exception); }
+
+            foreach (IPAddress proxyResolvedAddress in proxyResolvedAddresses)
+                if (proxyResolvedAddress.AddressFamily is AddressFamily.InterNetwork or AddressFamily.InterNetworkV6)
+                    options.KnownProxies.Add(proxyResolvedAddress);
+
+            // Only Trust The Last Forwarded Header In The Chain
+            options.ForwardLimit = 1;
+        });
+
         // Build The Application
         WebApplication application = builder.Build();
+
+        // Honour The Original HTTPS Scheme And Client Address Supplied By The Trusted Fronting Gateway Before Applying HTTPS Redirects
+        application.UseForwardedHeaders();
 
         // Configure Development-Specific Middleware
         if (application.Environment.IsDevelopment())

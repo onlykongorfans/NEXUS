@@ -15,5 +15,8 @@ global using Serilog;
 global using Serilog.Exceptions;
 
 global using System.Linq.Expressions;
+global using System.Net;
+global using System.Net.Sockets;
 global using System.Security.Cryptography;
 global using System.Text;
+global using System.Threading.RateLimiting;

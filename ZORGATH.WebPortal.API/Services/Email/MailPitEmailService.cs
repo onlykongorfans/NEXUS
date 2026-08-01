@@ -6,13 +6,15 @@ namespace ZORGATH.WebPortal.API.Services.Email;
 /// </summary>
 public class MailPitEmailService(IOptions<OperationalConfiguration> configuration, ILogger<MailPitEmailService> logger) : IEmailService
 {
+    private string PublicPortalBaseURL { get; } = configuration.Value.PublicPortalBaseURL.TrimEnd('/');
+
     private OperationalConfigurationSMTP SMTPConfiguration { get; } = configuration.Value.SMTP;
 
     private ILogger Logger { get; } = logger;
 
     public async Task<bool> SendEmailAddressRegistrationLink(string emailAddress, string token)
     {
-        string link = "https://localhost:5557/account/register/" + token;
+        string link = $"{PublicPortalBaseURL}/account/register/{token}";
 
         const string subject = "Verify Email Address";
 
@@ -39,9 +41,9 @@ public class MailPitEmailService(IOptions<OperationalConfiguration> configuratio
         return await SendEmail(emailAddress, subject, body);
     }
 
-    public async Task<bool> SendAccountPasswordResetLink(string emailAddress, string token, string generatedPassword, List<string> accountNames)
+    public async Task<bool> SendAccountPasswordResetLink(string emailAddress, string token, List<string> accountNames)
     {
-        string link = "https://localhost:5557/password/recover/" + token;
+        string link = $"{PublicPortalBaseURL}/password/recover/{token}";
 
         const string subject = "Reset Forgotten Password";
 
@@ -52,8 +54,7 @@ public class MailPitEmailService(IOptions<OperationalConfiguration> configuratio
         string body = "A password reset has been requested for an account that is registered with this email address."
                       + Environment.NewLine + "If you did not make this request, please ignore this message."
                       + Environment.NewLine + Environment.NewLine + accountNamesBody
-                      + Environment.NewLine + $@"Your new password will be: ""{generatedPassword}"""
-                      + Environment.NewLine + Environment.NewLine + "Please follow the link below to confirm and activate this new password:"
+                      + Environment.NewLine + Environment.NewLine + "Please follow the link below to choose a new password:"
                       + Environment.NewLine + Environment.NewLine + link
                       + Environment.NewLine + Environment.NewLine + "Regards,"
                       + Environment.NewLine + "The Project KONGOR Team";
@@ -75,7 +76,7 @@ public class MailPitEmailService(IOptions<OperationalConfiguration> configuratio
 
     public async Task<bool> SendAccountPasswordUpdateLink(string emailAddress, string token, List<string> accountNames)
     {
-        string link = "https://localhost:5557/password/update/" + token;
+        string link = $"{PublicPortalBaseURL}/password/update/{token}";
 
         const string subject = "Confirm Password Update";
 
@@ -108,7 +109,7 @@ public class MailPitEmailService(IOptions<OperationalConfiguration> configuratio
 
     public async Task<bool> SendEmailAddressUpdateLink(string emailAddress, string token)
     {
-        string link = "https://localhost:5557/email/update/" + token;
+        string link = $"{PublicPortalBaseURL}/email/update/{token}";
 
         const string subject = "Update Email Address";
 

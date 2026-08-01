@@ -51,6 +51,19 @@ public sealed class TeamCompatibilityTests
     }
 
     [Test]
+    public async Task Australian_And_South_East_Asian_Teams_Do_Not_Match()
+    {
+        MatchmakingSettings settings = MatchmakingTestBuilder.DefaultSettings();
+
+        MatchmakingGroup australiaStack = BuildFullStack(MatchmakingTestBuilder.Information(gameRegions: ["AU"]));
+        MatchmakingGroup singaporeStack = BuildFullStack(MatchmakingTestBuilder.Information(gameRegions: ["SG"]));
+
+        IReadOnlyList<MatchmakingMatch> matches = MatchmakingAlgorithm.RunMatchBrokerCycle([australiaStack, singaporeStack], settings);
+
+        await Assert.That(matches.Count).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task Ranked_And_Unranked_Full_Stacks_Do_Not_Match()
     {
         MatchmakingSettings settings = MatchmakingTestBuilder.DefaultSettings();

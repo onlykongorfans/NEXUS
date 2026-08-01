@@ -22,47 +22,50 @@ public class EmailAddressController(MerrickContext databaseContext, ILogger<Emai
         if (payload.EmailAddress.Equals(payload.ConfirmEmailAddress).Equals(false))
             return BadRequest($@"Email Address ""{payload.ConfirmEmailAddress}"" Does Not Match ""{payload.EmailAddress}""");
 
-        Token? token = await MerrickContext.Tokens.SingleOrDefaultAsync(token => token.EmailAddress.Equals(payload.EmailAddress) && token.Purpose.Equals(TokenPurpose.EmailAddressVerification));
+        IActionResult? sanitisationError = EmailAddressHelpers.TrySanitiseEmailAddress(payload.EmailAddress, HostEnvironment, Logger, out string sanitisedEmailAddress);
 
-        if (token is null)
+        if (sanitisationError is not null)
+            return sanitisationError;
+
+        Token? token = await MerrickContext.Tokens.SingleOrDefaultAsync(token =>
+            token.Data.Equals(sanitisedEmailAddress) && token.Purpose.Equals(TokenPurpose.EmailAddressVerification));
+
+        if (token is not null)
         {
-            IActionResult? sanitisationError = EmailAddressHelpers.TrySanitiseEmailAddress(payload.EmailAddress, HostEnvironment, Logger, out string sanitisedEmailAddress);
+            if (token.TimestampConsumed is not null)
+                return BadRequest($@"Email Address ""{payload.EmailAddress}"" Is Already Registered");
 
-            if (sanitisationError is not null)
-                return sanitisationError;
+            if (token.IsExpiredAt(DateTimeOffset.UtcNow).Equals(false))
+                return BadRequest($@"A Registration Request For Email Address ""{payload.EmailAddress}"" Has Already Been Made (Check Your Email Inbox For A Registration Link)");
 
-            token = new Token()
-            {
-                Purpose = TokenPurpose.EmailAddressVerification,
-                EmailAddress = payload.EmailAddress,
-                Value = Guid.CreateVersion7(),
-                Data = sanitisedEmailAddress,
-                Validity = TimeSpan.FromHours(24)
-            };
+            // Remove The Expired Request Immediately So The User Can Request A Fresh Verification Link
+            MerrickContext.Tokens.Remove(token);
+        }
 
-            await MerrickContext.Tokens.AddAsync(token);
+        token = new Token()
+        {
+            Purpose = TokenPurpose.EmailAddressVerification,
+            EmailAddress = sanitisedEmailAddress,
+            Value = Guid.CreateVersion7(),
+            Data = sanitisedEmailAddress,
+            Validity = TimeSpan.FromHours(24)
+        };
+
+        await MerrickContext.Tokens.AddAsync(token);
+        await MerrickContext.SaveChangesAsync();
+
+        bool sent = await EmailService.SendEmailAddressRegistrationLink(sanitisedEmailAddress, token.Value.ToString());
+
+        if (sent.Equals(false))
+        {
+            MerrickContext.Tokens.Remove(token);
+
             await MerrickContext.SaveChangesAsync();
 
-            bool sent = await EmailService.SendEmailAddressRegistrationLink(payload.EmailAddress, token.Value.ToString());
-
-            if (sent.Equals(false))
-            {
-                MerrickContext.Tokens.Remove(token);
-
-                await MerrickContext.SaveChangesAsync();
-
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, "Failed To Send Email Address Verification Email");
-            }
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, "Failed To Send Email Address Verification Email");
         }
 
-        else
-        {
-            return token.TimestampConsumed is null
-                ? BadRequest($@"A Registration Request For Email Address ""{payload.EmailAddress}"" Has Already Been Made (Check Your Email Inbox For A Registration Link)")
-                : BadRequest($@"Email Address ""{payload.EmailAddress}"" Is Already Registered");
-        }
-
-        return Ok($@"Email Address Registration Token Was Successfully Created, And An Email Was Sent To Address ""{payload.EmailAddress}""");
+        return Ok($@"Email Address Registration Token Was Successfully Created, And An Email Was Sent To Address ""{sanitisedEmailAddress}""");
     }
 
     [HttpPost("Update/Request", Name = "Request Email Address Update")]
@@ -70,6 +73,7 @@ public class EmailAddressController(MerrickContext databaseContext, ILogger<Emai
     [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(string), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(string), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(string), StatusCodes.Status422UnprocessableEntity)]
@@ -78,10 +82,13 @@ public class EmailAddressController(MerrickContext databaseContext, ILogger<Emai
     {
         string userEmailAddress = User.Claims.GetUserEmailAddress();
 
-        User? user = await MerrickContext.Users.SingleOrDefaultAsync(user => user.EmailAddress.Equals(userEmailAddress));
+        User? user = await MerrickContext.Users.Include(user => user.Accounts).SingleOrDefaultAsync(user => user.EmailAddress.Equals(userEmailAddress));
 
         if (user is null)
             return NotFound($@"User With Email Address ""{userEmailAddress}"" Was Not Found");
+
+        if (HostEnvironment.IsProduction() && ConfigurationManagedUserHelpers.IsConfigurationManaged(user))
+            return StatusCode(StatusCodes.Status403Forbidden, "Configuration-Managed Production Email Addresses Must Be Changed At Their Authoritative Secret Source");
 
         PasswordVerificationResult passwordVerificationResult = new PasswordHasher<User>().VerifyHashedPassword(user, user.PBKDF2PasswordHash, payload.Password);
 
@@ -137,6 +144,7 @@ public class EmailAddressController(MerrickContext databaseContext, ILogger<Emai
     [HttpPost("Update/Confirm", Name = "Confirm Email Address Update")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(string), StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> ConfirmEmailAddressUpdate(ConfirmEmailAddressUpdateDTO payload)
@@ -146,10 +154,26 @@ public class EmailAddressController(MerrickContext databaseContext, ILogger<Emai
         if (token is null)
             return NotFound($@"Email Address Update Token ""{payload.Token}"" Was Not Found");
 
-        User? user = await MerrickContext.Users.SingleOrDefaultAsync(user => user.EmailAddress.Equals(token.EmailAddress));
+        if (token.IsExpiredAt(DateTimeOffset.UtcNow))
+        {
+            MerrickContext.Tokens.Remove(token);
+            await MerrickContext.SaveChangesAsync();
+
+            return BadRequest($@"Email Address Update Token ""{payload.Token}"" Has Expired");
+        }
+
+        User? user = await MerrickContext.Users.Include(user => user.Accounts).SingleOrDefaultAsync(user => user.EmailAddress.Equals(token.EmailAddress));
 
         if (user is null)
             return NotFound($@"User With Email Address ""{token.EmailAddress}"" Was Not Found");
+
+        if (HostEnvironment.IsProduction() && ConfigurationManagedUserHelpers.IsConfigurationManaged(user))
+        {
+            MerrickContext.Tokens.Remove(token);
+            await MerrickContext.SaveChangesAsync();
+
+            return StatusCode(StatusCodes.Status403Forbidden, "Configuration-Managed Production Email Addresses Must Be Changed At Their Authoritative Secret Source");
+        }
 
         string oldEmailAddress = user.EmailAddress;
         string newEmailAddress = token.Data;

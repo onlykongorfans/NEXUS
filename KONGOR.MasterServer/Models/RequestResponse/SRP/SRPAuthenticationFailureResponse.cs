@@ -24,6 +24,7 @@ public class SRPAuthenticationFailureResponse(SRPAuthenticationFailureReason rea
         SRPAuthenticationFailureReason.MissingSRPClientProof            => "Missing SRP Client Proof",
         SRPAuthenticationFailureReason.MissingSystemInformation         => "Missing System Information",
         SRPAuthenticationFailureReason.SRPAuthenticationDisabled        => "SRP Authentication Is Disabled" + Environment.NewLine + "1) Open The Console (CTRL + F8)" + Environment.NewLine + @"2) Execute ""SetSave login_useSRP true""",
+        SRPAuthenticationFailureReason.TooManyAttempts                  => "Too Many Authentication Attempts",
         SRPAuthenticationFailureReason.UnexpectedUserAgent              => "Unexpected User Agent",
         _                                                               => "Unsupported Authentication Failure Reason" + " " + $@"""{nameof(reason)}"""
     };
@@ -55,5 +56,6 @@ public enum SRPAuthenticationFailureReason
     MissingSRPClientProof,
     MissingSystemInformation,
     SRPAuthenticationDisabled,
+    TooManyAttempts,
     UnexpectedUserAgent
 }

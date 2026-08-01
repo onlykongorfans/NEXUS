@@ -22,12 +22,15 @@ public class ASPIRE
         IConfigurationSection infrastructureConfiguration = builder.Configuration.GetRequiredSection("Infrastructure");
         string gateway = infrastructureConfiguration.GetValue<string?>("Gateway") ?? throw new NullReferenceException("Infrastructure Gateway Is NULL");
 
+        // Use Distinct Persistent Stores For Development And Production So Runtime State Cannot Leak Between Environments
+        string databaseName = builder.Environment.IsProduction() ? "production" : "development";
+
         // Set Distributed Cache Password Parameter Name And Environment Variable Name
         const string distributedCachePasswordParameterName = "distributed-cache-password";
         const string distributedCachePasswordEnvironmentVariableName = "DISTRIBUTED_CACHE_PASSWORD";
 
-        // Attempt To Resolve Distributed Cache Password From Configuration In Order Of Priority: 1) User Secrets, 2) Environment Variables
-        string? resolvedDistributedCachePassword = configuration[$"Parameters:{distributedCachePasswordParameterName}"] ?? configuration[distributedCachePasswordEnvironmentVariableName];
+        // Explicit Runtime Environment Variables Override Development User Secrets During Production Deployment
+        string? resolvedDistributedCachePassword = configuration[distributedCachePasswordEnvironmentVariableName] ?? configuration[$"Parameters:{distributedCachePasswordParameterName}"];
 
         // Populate Distributed Cache Password If Available In User Secrets Or Environment Variables
         IResourceBuilder<ParameterResource> distributedCachePassword = resolvedDistributedCachePassword is not null
@@ -36,8 +39,8 @@ public class ASPIRE
 
         // Add Distributed Cache Resource
         IResourceBuilder<ValkeyResource> distributedCache = builder.AddValkey("distributed-cache", password: distributedCachePassword)
-            .WithImageTag("latest") // Latest Valkey Image: https://github.com/valkey-io/valkey/releases/latest
-            .WithLifetime(ContainerLifetime.Persistent).WithDataVolume("distributed-cache-data"); // Persist Cached Data As Docker-Managed Data Volume
+            .WithImageTag("latest").WithImageSHA256("8e8d64b405ce18f41b8e5ee20aa4687a8ed0022d1298f2ce31cdcf3a76e09411") // Pin The Tested Valkey 9.1.0 Image
+            .WithLifetime(ContainerLifetime.Persistent).WithDataVolume($"distributed-cache-data-{databaseName}"); // Persist Cached Data In An Environment-Specific Docker-Managed Data Volume
 
         // Create Resource Relationship After Parent Resource Is Defined
         distributedCachePassword
@@ -47,7 +50,7 @@ public class ASPIRE
         // Add Distributed Cache Dashboard Resource
         // Redis Insight Is Used Rather Than The Valkey-Native Valkey Admin Because It Pre-Configures Its Connection From "RI_REDIS_*" Environment Variables, Whereas Valkey Admin Cannot Pre-Configure A Connection For A Standalone (Non-Cluster) Node (TODO: Revisit If Valkey Admin Adds Standalone Pre-Configuration)
         builder.AddContainer("distributed-cache-dashboard", "redis/redisinsight")
-            .WithImageTag("latest") // Latest Redis Insight Image: https://github.com/RedisInsight/RedisInsight/releases/latest
+            .WithImageTag("latest").WithImageSHA256("aa21bbd198455b4ad964f76782db951155aa0d712321f599972d1525f031f0e6") // Pin The Image Verified During Production Preparation
             .WithLifetime(ContainerLifetime.Persistent)
             .WithHttpEndpoint(targetPort: 5540, name: "http") // Default Redis Insight Web UI Port
             .WithEnvironment("RI_ACCEPT_TERMS_AND_CONDITIONS", "true") // Automatically Accept Terms And Conditions: https://redis.io/docs/latest/operate/redisinsight/configuration/
@@ -67,16 +70,13 @@ public class ASPIRE
         const string databasePasswordParameterName = "database-password";
         const string databasePasswordEnvironmentVariableName = "DATABASE_PASSWORD";
 
-        // Attempt To Resolve Database Password From Configuration In Order Of Priority: 1) User Secrets, 2) Environment Variables
-        string? resolvedDatabasePassword = configuration[$"Parameters:{databasePasswordParameterName}"] ?? configuration[databasePasswordEnvironmentVariableName];
+        // Explicit Runtime Environment Variables Override Development User Secrets During Production Deployment
+        string? resolvedDatabasePassword = configuration[databasePasswordEnvironmentVariableName] ?? configuration[$"Parameters:{databasePasswordParameterName}"];
 
         // Populate Database Password If Available In User Secrets Or Environment Variables
         IResourceBuilder<ParameterResource> databasePassword = resolvedDatabasePassword is not null
             ? builder.AddParameter(databasePasswordParameterName, resolvedDatabasePassword, secret: true)
             : builder.AddParameter(databasePasswordParameterName, secret: true);
-
-        // Configure Database Name Based On Environment
-        string databaseName = builder.Environment.IsProduction() ? "production" : "development";
 
         // Using The Default SQL Server Port Allows The Database To Be Accessible With Just The Host Name/Address And No Port Number (e.g. 127.0.0.1)
         // If The SQL Server Resource Does Not Define A Port, Then It Will Be Randomly Assigned One, And The Connection Address Format Will Be {HOST},{PORT} (e.g. 127.0.0.1,51433)
@@ -85,7 +85,7 @@ public class ASPIRE
 
         // Add SQL Server Resource (SQL Server 2025 Requires A Container-Native Data Directory, A Linux-To-Windows Bind Mount Causes I/O Failures During Startup, So A Data Volume Is Required)
         IResourceBuilder<SqlServerServerResource> databaseServer = builder.AddSqlServer("database-server", password: databasePassword, port: databasePort)
-            .WithImageTag("latest") // SQL Server Image Tags: https://mcr.microsoft.com/en-gb/artifact/mar/mssql/server/tags
+            .WithImageTag("latest").WithImageSHA256("86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a") // Pin The Tested SQL Server Image
             .WithLifetime(ContainerLifetime.Persistent).WithDataVolume($"database-server-data-{databaseName}") // Persist SQL Server Data As Docker-Managed Data Volume
             .WithEnvironment("ACCEPT_EULA", "Y").WithEnvironment("MSSQL_PID", "Developer"); // SQL Server Image Information: https://mcr.microsoft.com/en-gb/artifact/mar/mssql/server/about
 
@@ -100,8 +100,8 @@ public class ASPIRE
 
         // Add Structured Log Server Resource
         IResourceBuilder<SeqResource> logServer = builder.AddSeq("log-server")
-            .WithImageTag("latest") // Latest Seq Image: https://hub.docker.com/r/datalust/seq/tags
-            .WithLifetime(ContainerLifetime.Persistent).WithDataVolume("log-server-data") // Persist Ingested Logs As Docker-Managed Data Volume
+            .WithImageTag("latest").WithImageSHA256("868a12e93ec0b8c993767a7dd4cd6c8ebc441511c79e4cfac66c911f62d4db65") // Pin The Image Verified During Production Preparation
+            .WithLifetime(ContainerLifetime.Persistent).WithDataVolume($"log-server-data-{databaseName}") // Persist Ingested Logs In An Environment-Specific Docker-Managed Data Volume
             .WithEnvironment("SEQ_DIAGNOSTICS_INTERNALLOGGINGLEVEL", "Warning") // Quieten Seq's Own Internal Maintenance Logging, Which By Default Goes Into STDERR At Information Level
             .WithEnvironment("ACCEPT_EULA", "Y"); // Automatically Accept End User License Agreement: https://datalust.co/docs/environment-variables
 
@@ -111,17 +111,26 @@ public class ASPIRE
             // The Default Seq Administrator User Name
             const string logServerFirstRunAdministratorUserName = "admin";
 
-            // Any Well-Known Password; Needs To Be Changed On First Login
-            const string logServerFirstRunAdministratorPassword = "admin";
+            // Resolve The Initial Seq Administrator Password From A Protected Parameter Rather Than Tracked Configuration
+            const string logServerFirstRunAdministratorPasswordParameterName = "log-server-administrator-password";
+            const string logServerFirstRunAdministratorPasswordEnvironmentVariableName = "LOG_SERVER_ADMINISTRATOR_PASSWORD";
+
+            string? resolvedLogServerFirstRunAdministratorPassword =
+                configuration[logServerFirstRunAdministratorPasswordEnvironmentVariableName]
+                ?? configuration[$"Parameters:{logServerFirstRunAdministratorPasswordParameterName}"];
+
+            IResourceBuilder<ParameterResource> logServerFirstRunAdministratorPassword =
+                resolvedLogServerFirstRunAdministratorPassword is not null
+                    ? builder.AddParameter(logServerFirstRunAdministratorPasswordParameterName, resolvedLogServerFirstRunAdministratorPassword, secret: true)
+                    : builder.AddParameter(logServerFirstRunAdministratorPasswordParameterName, secret: true);
 
             logServer
                 .WithEnvironment("SEQ_FIRSTRUN_ADMINUSERNAME", logServerFirstRunAdministratorUserName) // Set The Initial Administrator User Name On The Log Server Resource
                 .WithEnvironment("SEQ_FIRSTRUN_ADMINPASSWORD", logServerFirstRunAdministratorPassword); // Set The Initial Administrator Password On The Log Server Resource
 
-            /*
-                Once An Administrator Password Has Been Set, It Will Continue To Be Required Regardless Of Environment
-                So If The Production Profile Is Launched, Which Sets A Password, Then This Password Will Continue To Be Required Even When Launching The Development Profile
-            */
+            logServerFirstRunAdministratorPassword
+                .WithDescription("Log Server Administrator Password")
+                .WithParentRelationship(logServer);
         }
 
         // Add Database Project
@@ -139,6 +148,7 @@ public class ASPIRE
         // Add Master Server Project
         builder.AddProject<KONGOR>("master-server", builder.Environment.IsProduction() ? "KONGOR.MasterServer Production" : "KONGOR.MasterServer Development")
             .WithReference(database, connectionName: "MERRICK").WaitFor(database) // Connect To SQL Server Database And Wait For It To Start
+            .WaitFor(databaseContext) // Wait For Database Initialization And Production Credential Rotation To Complete
             .WithReference(distributedCache, connectionName: "DISTRIBUTED-CACHE").WaitFor(distributedCache) // Connect To Distributed Cache And Wait For It To Start
             .WithReference(logServer) // Connect To Structured Log Server
             .WithEnvironment("CHAT_SERVER_HOST", chatServerHost)
@@ -162,6 +172,7 @@ public class ASPIRE
         // Add Web Portal API Project
         IResourceBuilder<ProjectResource> webPortalAPI = builder.AddProject<ZORGATH>("web-portal-api", builder.Environment.IsProduction() ? "ZORGATH.WebPortal.API Production" : "ZORGATH.WebPortal.API Development")
             .WithReference(database, connectionName: "MERRICK").WaitFor(database) // Connect To SQL Server Database And Wait For It To Start
+            .WaitFor(databaseContext) // Wait For Database Initialization And Production Credential Rotation To Complete
             .WithReference(logServer) // Connect To Structured Log Server
             .WithEnvironment("INFRASTRUCTURE_GATEWAY", gateway);
 
@@ -169,7 +180,7 @@ public class ASPIRE
         if (builder.Environment.IsDevelopment())
         {
             IResourceBuilder<ContainerResource> smtpServer = builder.AddContainer("smtp-server", "axllent/mailpit")
-                .WithImageTag("latest") // Latest MailPit Image: https://github.com/axllent/mailpit/releases/latest
+                .WithImageTag("latest").WithImageSHA256("5a49a77c5bdbe7c5474450b4f46348d09949df3695257729c93a30369382d4f6") // Pin The Tested Mailpit 1.30.4 Image
                 .WithLifetime(ContainerLifetime.Persistent)
                 .WithEndpoint(port: 1025, targetPort: 1025, name: "smtp", scheme: "tcp") // Default SMTP Port
                 .WithHttpEndpoint(port: 8025, targetPort: 8025, name: "http"); // Default Web UI Port
@@ -180,12 +191,71 @@ public class ASPIRE
         // Populate AWS SES Configuration In Staging/Production/etc.
         else
         {
+            // Rotate The Publicly-Known Built-In Credentials Before Production Accepts Traffic
+            const string builtInAdministratorEmailAddress = "kongor@kongor.fans";
+            const string builtInOperatorEmailAddress = "operator@kongor.fans";
+            const string builtInModeratorEmailAddress = "moderator@kongor.fans";
+
+            const string builtInAdministratorPasswordParameterName = "built-in-administrator-password";
+            const string builtInAdministratorPasswordEnvironmentVariableName = "BUILT_IN_ADMINISTRATOR_PASSWORD";
+            IResourceBuilder<ParameterResource> builtInAdministratorPassword = AddSecretParameter(
+                builder,
+                configuration,
+                builtInAdministratorPasswordParameterName,
+                builtInAdministratorPasswordEnvironmentVariableName);
+
+            const string builtInOperatorPasswordParameterName = "built-in-operator-password";
+            const string builtInOperatorPasswordEnvironmentVariableName = "BUILT_IN_OPERATOR_PASSWORD";
+            IResourceBuilder<ParameterResource> builtInOperatorPassword = AddSecretParameter(
+                builder,
+                configuration,
+                builtInOperatorPasswordParameterName,
+                builtInOperatorPasswordEnvironmentVariableName);
+
+            const string builtInModeratorPasswordParameterName = "built-in-moderator-password";
+            const string builtInModeratorPasswordEnvironmentVariableName = "BUILT_IN_MODERATOR_PASSWORD";
+            IResourceBuilder<ParameterResource> builtInModeratorPassword = AddSecretParameter(
+                builder,
+                configuration,
+                builtInModeratorPasswordParameterName,
+                builtInModeratorPasswordEnvironmentVariableName);
+
+            databaseContext
+                .WithEnvironment("BUILT_IN_ADMINISTRATOR_EMAIL", builtInAdministratorEmailAddress)
+                .WithEnvironment(builtInAdministratorPasswordEnvironmentVariableName, builtInAdministratorPassword)
+                .WithEnvironment("BUILT_IN_OPERATOR_EMAIL", builtInOperatorEmailAddress)
+                .WithEnvironment(builtInOperatorPasswordEnvironmentVariableName, builtInOperatorPassword)
+                .WithEnvironment("BUILT_IN_MODERATOR_EMAIL", builtInModeratorEmailAddress)
+                .WithEnvironment(builtInModeratorPasswordEnvironmentVariableName, builtInModeratorPassword);
+
+            builtInAdministratorPassword.WithDescription("Built-In Administrator Production Password").WithParentRelationship(databaseContext);
+            builtInOperatorPassword.WithDescription("Built-In Operator Production Password").WithParentRelationship(databaseContext);
+            builtInModeratorPassword.WithDescription("Built-In Moderator Production Password").WithParentRelationship(databaseContext);
+
+            // Set JWT Signing Key Parameter Name And Environment Variable Name
+            const string jwtSigningKeyParameterName = "jwt-signing-key";
+            const string jwtSigningKeyEnvironmentVariableName = "JWT_SIGNING_KEY";
+
+            // Explicit Runtime Environment Variables Override Development User Secrets During Production Deployment
+            string? resolvedJWTSigningKey = configuration[jwtSigningKeyEnvironmentVariableName] ?? configuration[$"Parameters:{jwtSigningKeyParameterName}"];
+
+            // Populate JWT Signing Key If Available In User Secrets Or Environment Variables
+            IResourceBuilder<ParameterResource> jwtSigningKey = resolvedJWTSigningKey is not null
+                ? builder.AddParameter(jwtSigningKeyParameterName, resolvedJWTSigningKey, secret: true)
+                : builder.AddParameter(jwtSigningKeyParameterName, secret: true);
+
+            // Pass The Production JWT Signing Key To The Web Portal API Without Storing It In Tracked Configuration
+            webPortalAPI.WithEnvironment("Operational__JWT__SigningKey", jwtSigningKey);
+
+            // Create Resource Relationship After Parent Resource Is Defined
+            jwtSigningKey.WithDescription("Web Portal JWT Signing Key").WithParentRelationship(webPortalAPI);
+
             // Set SMTP Host Parameter Name And Environment Variable Name
             const string smtpHostParameterName = "smtp-host";
             const string smtpHostEnvironmentVariableName = "SMTP_HOST";
 
-            // Attempt To Resolve SMTP Host From Configuration In Order Of Priority: 1) User Secrets, 2) Environment Variables
-            string? resolvedSMTPHost = configuration[$"Parameters:{smtpHostParameterName}"] ?? configuration[smtpHostEnvironmentVariableName];
+            // Explicit Runtime Environment Variables Override Development User Secrets During Production Deployment
+            string? resolvedSMTPHost = configuration[smtpHostEnvironmentVariableName] ?? configuration[$"Parameters:{smtpHostParameterName}"];
 
             // Populate SMTP Host If Available In User Secrets Or Environment Variables
             IResourceBuilder<ParameterResource> smtpHost = resolvedSMTPHost is not null
@@ -196,8 +266,8 @@ public class ASPIRE
             const string smtpPortParameterName = "smtp-port";
             const string smtpPortEnvironmentVariableName = "SMTP_PORT";
 
-            // Attempt To Resolve SMTP Port From Configuration In Order Of Priority: 1) User Secrets, 2) Environment Variables
-            string? resolvedSMTPPort = configuration[$"Parameters:{smtpPortParameterName}"] ?? configuration[smtpPortEnvironmentVariableName];
+            // Explicit Runtime Environment Variables Override Development User Secrets During Production Deployment
+            string? resolvedSMTPPort = configuration[smtpPortEnvironmentVariableName] ?? configuration[$"Parameters:{smtpPortParameterName}"];
 
             // Populate SMTP Port If Available In User Secrets Or Environment Variables
             IResourceBuilder<ParameterResource> smtpPort = resolvedSMTPPort is not null
@@ -208,8 +278,8 @@ public class ASPIRE
             const string smtpUsernameParameterName = "smtp-username";
             const string smtpUsernameEnvironmentVariableName = "SMTP_USERNAME";
 
-            // Attempt To Resolve SMTP Username From Configuration In Order Of Priority: 1) User Secrets, 2) Environment Variables
-            string? resolvedSMTPUsername = configuration[$"Parameters:{smtpUsernameParameterName}"] ?? configuration[smtpUsernameEnvironmentVariableName];
+            // Explicit Runtime Environment Variables Override Development User Secrets During Production Deployment
+            string? resolvedSMTPUsername = configuration[smtpUsernameEnvironmentVariableName] ?? configuration[$"Parameters:{smtpUsernameParameterName}"];
 
             // Populate SMTP Username If Available In User Secrets Or Environment Variables
             IResourceBuilder<ParameterResource> smtpUsername = resolvedSMTPUsername is not null
@@ -220,8 +290,8 @@ public class ASPIRE
             const string smtpPasswordParameterName = "smtp-password";
             const string smtpPasswordEnvironmentVariableName = "SMTP_PASSWORD";
 
-            // Attempt To Resolve SMTP Password From Configuration In Order Of Priority: 1) User Secrets, 2) Environment Variables
-            string? resolvedSMTPPassword = configuration[$"Parameters:{smtpPasswordParameterName}"] ?? configuration[smtpPasswordEnvironmentVariableName];
+            // Explicit Runtime Environment Variables Override Development User Secrets During Production Deployment
+            string? resolvedSMTPPassword = configuration[smtpPasswordEnvironmentVariableName] ?? configuration[$"Parameters:{smtpPasswordParameterName}"];
 
             // Populate SMTP Password If Available In User Secrets Or Environment Variables
             IResourceBuilder<ParameterResource> smtpPassword = resolvedSMTPPassword is not null
@@ -253,5 +323,18 @@ public class ASPIRE
 
         // Start Orchestrating Distributed Application
         builder.Build().Run();
+    }
+
+    private static IResourceBuilder<ParameterResource> AddSecretParameter(
+        IDistributedApplicationBuilder builder,
+        IConfiguration configuration,
+        string parameterName,
+        string environmentVariableName)
+    {
+        string? resolvedValue = configuration[environmentVariableName] ?? configuration[$"Parameters:{parameterName}"];
+
+        return resolvedValue is not null
+            ? builder.AddParameter(parameterName, resolvedValue, secret: true)
+            : builder.AddParameter(parameterName, secret: true);
     }
 }

@@ -34,7 +34,7 @@ public sealed class UserRegistrationTests(ZORGATHIntegrationWebApplicationFactor
         ILogger<UserController> userLogger = scope.ServiceProvider.GetRequiredService<ILogger<UserController>>();
         IOptions<OperationalConfiguration> configuration = scope.ServiceProvider.GetRequiredService<IOptions<OperationalConfiguration>>();
 
-        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment);
+        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment, scope.ServiceProvider.GetRequiredService<AuthenticationAttemptLimiter>());
 
         IActionResult response = await userController.RegisterUserAndMainAccount(
             new RegisterUserAndMainAccountDTO(registrationToken.Value.ToString(), accountName, password, password));
@@ -105,7 +105,7 @@ public sealed class UserRegistrationTests(ZORGATHIntegrationWebApplicationFactor
         ILogger<UserController> userLogger = scope.ServiceProvider.GetRequiredService<ILogger<UserController>>();
         IOptions<OperationalConfiguration> configuration = scope.ServiceProvider.GetRequiredService<IOptions<OperationalConfiguration>>();
 
-        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment);
+        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment, scope.ServiceProvider.GetRequiredService<AuthenticationAttemptLimiter>());
 
         IActionResult response = await userController.RegisterUserAndMainAccount(
             new RegisterUserAndMainAccountDTO(registrationToken.Value.ToString(), accountName, password, confirmPassword));
@@ -129,7 +129,7 @@ public sealed class UserRegistrationTests(ZORGATHIntegrationWebApplicationFactor
 
         MerrickContext databaseContext = scope.ServiceProvider.GetRequiredService<MerrickContext>();
 
-        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment);
+        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment, scope.ServiceProvider.GetRequiredService<AuthenticationAttemptLimiter>());
 
         IActionResult response = await userController.RegisterUserAndMainAccount(
             new RegisterUserAndMainAccountDTO(invalidToken, accountName, password, password));
@@ -166,7 +166,7 @@ public sealed class UserRegistrationTests(ZORGATHIntegrationWebApplicationFactor
         ILogger<UserController> userLogger = scope.ServiceProvider.GetRequiredService<ILogger<UserController>>();
         IOptions<OperationalConfiguration> configuration = scope.ServiceProvider.GetRequiredService<IOptions<OperationalConfiguration>>();
 
-        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment);
+        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment, scope.ServiceProvider.GetRequiredService<AuthenticationAttemptLimiter>());
 
         IActionResult response = await userController.RegisterUserAndMainAccount(
             new RegisterUserAndMainAccountDTO(registrationToken.Value.ToString(), accountName, password, password));
@@ -201,7 +201,7 @@ public sealed class UserRegistrationTests(ZORGATHIntegrationWebApplicationFactor
         ILogger<UserController> userLogger = scope.ServiceProvider.GetRequiredService<ILogger<UserController>>();
         IOptions<OperationalConfiguration> configuration = scope.ServiceProvider.GetRequiredService<IOptions<OperationalConfiguration>>();
 
-        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment);
+        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment, scope.ServiceProvider.GetRequiredService<AuthenticationAttemptLimiter>());
 
         IActionResult firstResponse = await userController.RegisterUserAndMainAccount(
             new RegisterUserAndMainAccountDTO(tokenValue, accountName, password, password));
@@ -217,6 +217,41 @@ public sealed class UserRegistrationTests(ZORGATHIntegrationWebApplicationFactor
             new RegisterUserAndMainAccountDTO(tokenValue, $"{accountName}2", password, password));
 
         await Assert.That(secondResponse).IsTypeOf<ConflictObjectResult>();
+    }
+
+    [Test]
+    public async Task Register_User_And_Main_Account_With_Expired_Token_Returns_Bad_Request_And_Removes_Token()
+    {
+        const string emailAddress = "expired-user-registration@example.technology";
+        const string accountName = "ExpiredUser";
+        const string password = "SecurePassword123!!";
+
+        using IServiceScope scope = webApplicationFactory.Services.CreateScope();
+
+        ILogger<EmailAddressController> emailLogger = scope.ServiceProvider.GetRequiredService<ILogger<EmailAddressController>>();
+        IEmailService emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
+        IWebHostEnvironment hostEnvironment = scope.ServiceProvider.GetRequiredService<IWebHostEnvironment>();
+        MerrickContext databaseContext = scope.ServiceProvider.GetRequiredService<MerrickContext>();
+
+        EmailAddressController emailController = new (databaseContext, emailLogger, emailService, hostEnvironment);
+        await emailController.RegisterEmailAddress(new RegisterEmailAddressDTO(emailAddress, emailAddress));
+
+        Token registrationToken = await databaseContext.Tokens.SingleAsync(token =>
+            token.EmailAddress.Equals(emailAddress) && token.Purpose.Equals(TokenPurpose.EmailAddressVerification));
+
+        registrationToken.TimestampCreated = DateTimeOffset.UtcNow.Subtract(registrationToken.Validity).AddMinutes(-1);
+        await databaseContext.SaveChangesAsync();
+
+        ILogger<UserController> userLogger = scope.ServiceProvider.GetRequiredService<ILogger<UserController>>();
+        IOptions<OperationalConfiguration> configuration = scope.ServiceProvider.GetRequiredService<IOptions<OperationalConfiguration>>();
+        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment, scope.ServiceProvider.GetRequiredService<AuthenticationAttemptLimiter>());
+
+        IActionResult response = await userController.RegisterUserAndMainAccount(
+            new RegisterUserAndMainAccountDTO(registrationToken.Value.ToString(), accountName, password, password));
+
+        await Assert.That(response).IsTypeOf<BadRequestObjectResult>();
+        await Assert.That(await databaseContext.Tokens.AnyAsync(token => token.ID.Equals(registrationToken.ID))).IsFalse();
+        await Assert.That(await databaseContext.Users.AnyAsync(user => user.EmailAddress.Equals(emailAddress))).IsFalse();
     }
 
     [Test]
@@ -248,7 +283,7 @@ public sealed class UserRegistrationTests(ZORGATHIntegrationWebApplicationFactor
         ILogger<UserController> userLogger = scope.ServiceProvider.GetRequiredService<ILogger<UserController>>();
         IOptions<OperationalConfiguration> configuration = scope.ServiceProvider.GetRequiredService<IOptions<OperationalConfiguration>>();
 
-        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment);
+        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment, scope.ServiceProvider.GetRequiredService<AuthenticationAttemptLimiter>());
 
         IActionResult response = await userController.RegisterUserAndMainAccount(
             new RegisterUserAndMainAccountDTO(registrationToken.Value.ToString(), secondAccountName, password, password));
@@ -285,7 +320,7 @@ public sealed class UserRegistrationTests(ZORGATHIntegrationWebApplicationFactor
         ILogger<UserController> userLogger = scope.ServiceProvider.GetRequiredService<ILogger<UserController>>();
         IOptions<OperationalConfiguration> configuration = scope.ServiceProvider.GetRequiredService<IOptions<OperationalConfiguration>>();
 
-        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment);
+        UserController userController = new (databaseContext, userLogger, emailService, configuration, hostEnvironment, scope.ServiceProvider.GetRequiredService<AuthenticationAttemptLimiter>());
 
         IActionResult response = await userController.RegisterUserAndMainAccount(
             new RegisterUserAndMainAccountDTO(registrationToken.Value.ToString(), secondAccountName, password, password));

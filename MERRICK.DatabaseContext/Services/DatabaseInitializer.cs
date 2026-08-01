@@ -1,6 +1,6 @@
 ﻿namespace MERRICK.DatabaseContext.Services;
 
-public class DatabaseInitializer(IServiceProvider serviceProvider, ILogger<DatabaseInitializer> logger) : BackgroundService
+public class DatabaseInitializer(IServiceProvider serviceProvider, ILogger<DatabaseInitializer> logger, IHostEnvironment hostEnvironment) : BackgroundService
 {
     public const string ActivitySourceName = "Migrations";
 
@@ -38,8 +38,32 @@ public class DatabaseInitializer(IServiceProvider serviceProvider, ILogger<Datab
 
         await SeedDataHandlers.SeedUsers(context, cancellationToken, logger);
         await SeedDataHandlers.SeedClans(context, cancellationToken, logger);
-        await SeedDataHandlers.SeedAccounts(context, cancellationToken, logger);
+        await SeedDataHandlers.SeedAccounts(context, cancellationToken, logger, seedBuiltInGuestAccounts: hostEnvironment.IsProduction() is false);
         await SeedDataHandlers.SeedOperator(context, cancellationToken, logger);
+
+        if (hostEnvironment.IsProduction())
+        {
+            await SeedDataHandlers.SecureBuiltInProductionCredentials(
+                context,
+                cancellationToken,
+                logger,
+                GetRequiredProductionSetting("BUILT_IN_ADMINISTRATOR_EMAIL"),
+                GetRequiredProductionSetting("BUILT_IN_ADMINISTRATOR_PASSWORD"),
+                GetRequiredProductionSetting("BUILT_IN_OPERATOR_EMAIL"),
+                GetRequiredProductionSetting("BUILT_IN_OPERATOR_PASSWORD"),
+                GetRequiredProductionSetting("BUILT_IN_MODERATOR_EMAIL"),
+                GetRequiredProductionSetting("BUILT_IN_MODERATOR_PASSWORD"));
+        }
+
         await SeedDataHandlers.SeedHeroGuides(context, cancellationToken, logger);
+    }
+
+    private static string GetRequiredProductionSetting(string name)
+    {
+        string? value = Environment.GetEnvironmentVariable(name);
+
+        return string.IsNullOrWhiteSpace(value)
+            ? throw new InvalidOperationException($@"Required Production Setting ""{name}"" Is Not Configured")
+            : value;
     }
 }

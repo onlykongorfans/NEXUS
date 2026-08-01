@@ -92,7 +92,7 @@ public static class SeedDataHandlers
             clans.Count(), string.Join(", ", clans.Select(clan => clan.Name)));
     }
 
-    public static async Task SeedAccounts(MerrickContext context, CancellationToken cancellationToken, ILogger logger)
+    public static async Task SeedAccounts(MerrickContext context, CancellationToken cancellationToken, ILogger logger, bool seedBuiltInGuestAccounts)
     {
         if (await context.Accounts.AnyAsync(cancellationToken))
         {
@@ -176,33 +176,52 @@ public static class SeedDataHandlers
             await context.AddAsync(hostAccount, cancellationToken);
         }
 
-        User userGuest = await context.Users.Skip(1).FirstAsync(cancellationToken);
+        User userGuest = await context.Users.SingleAsync(user => user.EmailAddress.Equals(OOTB.Accounts.GUEST.EmailAddress), cancellationToken: cancellationToken);
         Clan clanGuest = await context.Clans.Skip(1).FirstAsync(cancellationToken);
 
-        for (int iterator = 0; iterator < 50 + 1; iterator++)
+        Account moderatorAccount = new ()
         {
-            Account guestAccount = new ()
-            {
-                Name = iterator is 0 ? "MODERATOR" : $"GUEST-{iterator:D2}",
-                User = userGuest,
-                Type = iterator is 0 ? AccountType.MatchModerator : AccountType.Guest,
-                IsMain = iterator is 0,
-                Clan = clanGuest,
-                ClanTier = iterator is 0 ? ClanTier.Leader : ClanTier.Member,
-                TimestampJoinedClan = DateTimeOffset.UtcNow,
-                AscensionLevel = 0,
-                AutoConnectChatChannels = [ ChatChannels.GuestsChannel, clan.GetChatChannelName() ],
-                SelectedStoreItems = [ "ai.custom_icon:1", "av.Flamboyant", "c.cat_courier", "cc.frostburnlogo", "cr.Punk Creep", "cs.frostburnlogo", "m.Super-Taunt", "sc.paragon_circle_upgrade", "t.Dumpster_Taunt", "te.Punk TP", "w.8bit_ward" ]
-            };
+            Name = "MODERATOR",
+            User = userGuest,
+            Type = AccountType.MatchModerator,
+            IsMain = true,
+            Clan = clanGuest,
+            ClanTier = ClanTier.Leader,
+            TimestampJoinedClan = DateTimeOffset.UtcNow,
+            AscensionLevel = 0,
+            AutoConnectChatChannels = [ ChatChannels.GuestsChannel, clan.GetChatChannelName() ],
+            SelectedStoreItems = [ "ai.custom_icon:1", "av.Flamboyant", "c.cat_courier", "cc.frostburnlogo", "cr.Punk Creep", "cs.frostburnlogo", "m.Super-Taunt", "sc.paragon_circle_upgrade", "t.Dumpster_Taunt", "te.Punk TP", "w.8bit_ward" ]
+        };
 
-            await context.AddAsync(guestAccount, cancellationToken);
+        await context.AddAsync(moderatorAccount, cancellationToken);
+
+        if (seedBuiltInGuestAccounts)
+        {
+            for (int iterator = 1; iterator <= 50; iterator++)
+            {
+                Account guestAccount = new ()
+                {
+                    Name = $"GUEST-{iterator:D2}",
+                    User = userGuest,
+                    Type = AccountType.Guest,
+                    IsMain = false,
+                    Clan = clanGuest,
+                    ClanTier = ClanTier.Member,
+                    TimestampJoinedClan = DateTimeOffset.UtcNow,
+                    AscensionLevel = 0,
+                    AutoConnectChatChannels = [ ChatChannels.GuestsChannel, clan.GetChatChannelName() ],
+                    SelectedStoreItems = [ "ai.custom_icon:1", "av.Flamboyant", "c.cat_courier", "cc.frostburnlogo", "cr.Punk Creep", "cs.frostburnlogo", "m.Super-Taunt", "sc.paragon_circle_upgrade", "t.Dumpster_Taunt", "te.Punk TP", "w.8bit_ward" ]
+                };
+
+                await context.AddAsync(guestAccount, cancellationToken);
+            }
         }
 
         await context.SaveChangesAsync(cancellationToken);
 
         int seededAccountCount = await context.Accounts.CountAsync(cancellationToken);
 
-        logger.LogInformation(@"Seeded {AccountCount} Accounts Across System, Sub-, Host, And Guest Account Types", seededAccountCount);
+        logger.LogInformation("Seeded {AccountCount} Accounts; Built-In Guest Accounts Included: {BuiltInGuestAccountsIncluded}", seededAccountCount, seedBuiltInGuestAccounts);
 
         // Raise The Skill Rating Of The Non-Guest Staff Accounts Above The Default So They Appear Ranked During Testing
 
@@ -353,7 +372,7 @@ public static class SeedDataHandlers
         const string operatorEmailAddress = OOTB.Accounts.OPERATOR.EmailAddress;
         const string operatorAccountName = OOTB.Accounts.OPERATOR.Name;
 
-        if (await context.Users.AnyAsync(user => user.EmailAddress.Equals(operatorEmailAddress), cancellationToken))
+        if (await context.Accounts.AnyAsync(account => account.Name.Equals(operatorAccountName), cancellationToken))
         {
             logger.LogDebug(@"Skipped Seeding {AccountName} Account: It Has Already Been Seeded", operatorAccountName);
 
@@ -394,6 +413,132 @@ public static class SeedDataHandlers
         await context.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation(@"Seeded {AccountName} Account With Email Address ""{UserEmailAddress}"" And Custodian Role", operatorAccountName, operatorEmailAddress);
+    }
+
+    /// <summary>
+    ///     Replaces the publicly-known out-of-box passwords on the built-in administrator, operator, and moderator users when running in Production.
+    ///     Existing hashes are left unchanged on subsequent starts when they already represent the configured passwords.
+    /// </summary>
+    public static async Task SecureBuiltInProductionCredentials(
+        MerrickContext context,
+        CancellationToken cancellationToken,
+        ILogger logger,
+        string administratorEmailAddress,
+        string administratorPassword,
+        string operatorEmailAddress,
+        string operatorPassword,
+        string moderatorEmailAddress,
+        string moderatorPassword)
+    {
+        ValidateProductionPassword("Administrator", administratorPassword);
+        ValidateProductionPassword("Operator", operatorPassword);
+        ValidateProductionPassword("Moderator", moderatorPassword);
+
+        if (new[] { administratorPassword, operatorPassword, moderatorPassword }.Distinct(StringComparer.Ordinal).Count() is not 3)
+            throw new InvalidOperationException("The Built-In Administrator, Operator, And Moderator Production Passwords Must Be Different");
+
+        if (new[] { administratorEmailAddress, operatorEmailAddress, moderatorEmailAddress }.Distinct(StringComparer.OrdinalIgnoreCase).Count() is not 3)
+            throw new InvalidOperationException("The Built-In Administrator, Operator, And Moderator Production Email Addresses Must Be Different");
+
+        Account administratorAccount = await context.Accounts.Include(account => account.User)
+            .SingleOrDefaultAsync(account => account.Name.Equals("KONGOR"), cancellationToken)
+            ?? throw new InvalidOperationException(@"The Built-In Administrator Account ""KONGOR"" Was Not Found");
+
+        Account operatorAccount = await context.Accounts.Include(account => account.User)
+            .SingleOrDefaultAsync(account => account.Name.Equals(OOTB.Accounts.OPERATOR.Name), cancellationToken)
+            ?? throw new InvalidOperationException($@"The Built-In Operator Account ""{OOTB.Accounts.OPERATOR.Name}"" Was Not Found");
+
+        Account moderatorAccount = await context.Accounts.Include(account => account.User)
+            .SingleOrDefaultAsync(account => account.Name.Equals("MODERATOR"), cancellationToken)
+            ?? throw new InvalidOperationException(@"The Built-In Moderator Account ""MODERATOR"" Was Not Found");
+
+        await ValidateProductionEmailAddressAvailability(context, administratorAccount.User, "Administrator", administratorEmailAddress, cancellationToken);
+        await ValidateProductionEmailAddressAvailability(context, operatorAccount.User, "Operator", operatorEmailAddress, cancellationToken);
+        await ValidateProductionEmailAddressAvailability(context, moderatorAccount.User, "Moderator", moderatorEmailAddress, cancellationToken);
+
+        bool credentialsChanged = false;
+
+        credentialsChanged |= SetEmailAddressIfChanged(administratorAccount.User, administratorEmailAddress);
+        credentialsChanged |= SetEmailAddressIfChanged(operatorAccount.User, operatorEmailAddress);
+        credentialsChanged |= SetEmailAddressIfChanged(moderatorAccount.User, moderatorEmailAddress);
+        credentialsChanged |= SetPasswordIfChanged(administratorAccount.User, administratorPassword);
+        credentialsChanged |= SetPasswordIfChanged(operatorAccount.User, operatorPassword);
+        credentialsChanged |= SetPasswordIfChanged(moderatorAccount.User, moderatorPassword);
+
+        if (credentialsChanged)
+            await context.SaveChangesAsync(cancellationToken);
+
+        logger.LogInformation(
+            "Verified Rotated Production Credentials For Built-In Administrator, Operator, And Moderator Users; Email Addresses: {AdministratorEmailAddress}, {OperatorEmailAddress}, {ModeratorEmailAddress}; Changes Applied: {ChangesApplied}",
+            administratorEmailAddress,
+            operatorEmailAddress,
+            moderatorEmailAddress,
+            credentialsChanged);
+    }
+
+    private static async Task ValidateProductionEmailAddressAvailability(
+        MerrickContext context,
+        User builtInUser,
+        string credentialName,
+        string emailAddress,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(emailAddress))
+            throw new InvalidOperationException($"{credentialName} Production Email Address Must Be Configured");
+
+        User? userWithRequestedEmailAddress = await context.Users
+            .SingleOrDefaultAsync(user => user.EmailAddress.Equals(emailAddress), cancellationToken);
+
+        if (userWithRequestedEmailAddress is not null && userWithRequestedEmailAddress.ID != builtInUser.ID)
+            throw new InvalidOperationException($@"{credentialName} Email Address ""{emailAddress}"" Is Already Assigned To Another User");
+    }
+
+    private static bool SetEmailAddressIfChanged(User user, string emailAddress)
+    {
+        if (user.EmailAddress.Equals(emailAddress, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        user.EmailAddress = emailAddress;
+
+        return true;
+    }
+
+    private static bool SetPasswordIfChanged(User user, string password)
+    {
+        bool srpPasswordMatches = user.SRPPasswordSalt.Length is 64
+            && SRPPasswordHandlers.ComputeSRPPasswordHash(password, user.SRPPasswordSalt).Equals(user.SRPPasswordHash, StringComparison.Ordinal);
+
+        bool portalPasswordMatches = string.IsNullOrWhiteSpace(user.PBKDF2PasswordHash) is false
+            && new PasswordHasher<User>().VerifyHashedPassword(user, user.PBKDF2PasswordHash, password) is PasswordVerificationResult.Success;
+
+        if (srpPasswordMatches && portalPasswordMatches)
+            return false;
+
+        string salt = SRPPasswordHandlers.GenerateSRPPasswordSalt();
+
+        user.SRPPasswordSalt = salt;
+        user.SRPPasswordHash = SRPPasswordHandlers.ComputeSRPPasswordHash(password, salt);
+        user.PBKDF2PasswordHash = new PasswordHasher<User>().HashPassword(user, password);
+
+        return true;
+    }
+
+    private static void ValidateProductionPassword(string credentialName, string password)
+    {
+        if (password.Length < 16
+            || password.Any(char.IsUpper) is false
+            || password.Any(char.IsLower) is false
+            || password.Any(char.IsDigit) is false
+            || password.All(char.IsLetterOrDigit))
+        {
+            throw new InvalidOperationException($"{credentialName} Production Password Must Be At Least 16 Characters And Contain Uppercase, Lowercase, Numeric, And Non-Alphanumeric Characters");
+        }
+
+        if (password.Equals(OOTB.Accounts.GUEST.Password, StringComparison.Ordinal)
+            || password.Equals(OOTB.Accounts.OPERATOR.Password, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"{credentialName} Production Password Cannot Use A Publicly-Known Out-Of-Box Password");
+        }
     }
 
     public static async Task SeedHeroGuides(MerrickContext context, CancellationToken cancellationToken, ILogger logger)

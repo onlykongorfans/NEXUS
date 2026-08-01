@@ -96,4 +96,96 @@ public sealed class EmailAddressRegistrationTests(ZORGATHIntegrationWebApplicati
 
         await Assert.That(response).IsTypeOf<BadRequestObjectResult>();
     }
+
+    [Test]
+    [Arguments("tester+public-beta@subdomain.example.technology")]
+    [Arguments("player@independent-domain.games")]
+    public async Task Register_Email_Address_Accepts_Aliases_Custom_Providers_And_Long_TLDs(string emailAddress)
+    {
+        using IServiceScope scope = webApplicationFactory.Services.CreateScope();
+
+        ILogger<EmailAddressController> logger = scope.ServiceProvider.GetRequiredService<ILogger<EmailAddressController>>();
+        IEmailService emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
+        IWebHostEnvironment hostEnvironment = scope.ServiceProvider.GetRequiredService<IWebHostEnvironment>();
+        MerrickContext databaseContext = scope.ServiceProvider.GetRequiredService<MerrickContext>();
+
+        EmailAddressController controller = new (databaseContext, logger, emailService, hostEnvironment);
+
+        IActionResult response = await controller.RegisterEmailAddress(new RegisterEmailAddressDTO(emailAddress, emailAddress));
+
+        await Assert.That(response).IsTypeOf<OkObjectResult>();
+        await Assert.That(await databaseContext.Tokens.AnyAsync(token =>
+            token.EmailAddress.Equals(emailAddress) && token.Purpose.Equals(TokenPurpose.EmailAddressVerification))).IsTrue();
+    }
+
+    [Test]
+    public async Task Register_Email_Address_Preserves_Local_Part_Case_And_Normalises_Domain_Case()
+    {
+        const string submittedEmailAddress = "CaseSensitiveMailbox@EXAMPLE.TECHNOLOGY";
+        const string expectedEmailAddress = "CaseSensitiveMailbox@example.technology";
+
+        using IServiceScope scope = webApplicationFactory.Services.CreateScope();
+
+        ILogger<EmailAddressController> logger = scope.ServiceProvider.GetRequiredService<ILogger<EmailAddressController>>();
+        IEmailService emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
+        IWebHostEnvironment hostEnvironment = scope.ServiceProvider.GetRequiredService<IWebHostEnvironment>();
+        MerrickContext databaseContext = scope.ServiceProvider.GetRequiredService<MerrickContext>();
+
+        EmailAddressController controller = new (databaseContext, logger, emailService, hostEnvironment);
+
+        IActionResult response = await controller.RegisterEmailAddress(new RegisterEmailAddressDTO(submittedEmailAddress, submittedEmailAddress));
+
+        await Assert.That(response).IsTypeOf<OkObjectResult>();
+
+        Token token = await databaseContext.Tokens.SingleAsync(candidate =>
+            candidate.EmailAddress.Equals(expectedEmailAddress)
+            && candidate.Purpose.Equals(TokenPurpose.EmailAddressVerification));
+
+        RecordedEmail email = webApplicationFactory.GetInMemoryEmailService().GetRecordedFor(expectedEmailAddress).Single();
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(token.EmailAddress).IsEqualTo(expectedEmailAddress);
+            await Assert.That(token.Data).IsEqualTo(expectedEmailAddress);
+            await Assert.That(email.Recipient).IsEqualTo(expectedEmailAddress);
+        }
+    }
+
+    [Test]
+    public async Task Register_Email_Address_Replaces_Expired_Unconsumed_Token()
+    {
+        const string emailAddress = "expired-registration@example.technology";
+
+        using IServiceScope scope = webApplicationFactory.Services.CreateScope();
+
+        ILogger<EmailAddressController> logger = scope.ServiceProvider.GetRequiredService<ILogger<EmailAddressController>>();
+        IEmailService emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
+        IWebHostEnvironment hostEnvironment = scope.ServiceProvider.GetRequiredService<IWebHostEnvironment>();
+        MerrickContext databaseContext = scope.ServiceProvider.GetRequiredService<MerrickContext>();
+
+        EmailAddressController controller = new (databaseContext, logger, emailService, hostEnvironment);
+
+        await controller.RegisterEmailAddress(new RegisterEmailAddressDTO(emailAddress, emailAddress));
+
+        Token originalToken = await databaseContext.Tokens.SingleAsync(token =>
+            token.EmailAddress.Equals(emailAddress) && token.Purpose.Equals(TokenPurpose.EmailAddressVerification));
+
+        Guid originalValue = originalToken.Value;
+        originalToken.TimestampCreated = DateTimeOffset.UtcNow.Subtract(originalToken.Validity).AddMinutes(-1);
+        await databaseContext.SaveChangesAsync();
+
+        IActionResult response = await controller.RegisterEmailAddress(new RegisterEmailAddressDTO(emailAddress, emailAddress));
+
+        await Assert.That(response).IsTypeOf<OkObjectResult>();
+
+        Token replacementToken = await databaseContext.Tokens.SingleAsync(token =>
+            token.EmailAddress.Equals(emailAddress) && token.Purpose.Equals(TokenPurpose.EmailAddressVerification));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(replacementToken.Value).IsNotEqualTo(originalValue);
+            await Assert.That(replacementToken.TimestampConsumed).IsNull();
+            await Assert.That(replacementToken.IsExpiredAt(DateTimeOffset.UtcNow)).IsFalse();
+        }
+    }
 }

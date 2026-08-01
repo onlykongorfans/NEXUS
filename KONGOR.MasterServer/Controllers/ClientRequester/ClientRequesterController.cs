@@ -3,7 +3,7 @@ namespace KONGOR.MasterServer.Controllers.ClientRequester;
 [ApiController]
 [Route("client_requester.php")]
 [Consumes("application/x-www-form-urlencoded")]
-public partial class ClientRequesterController(MerrickContext databaseContext, IDatabase distributedCache, HeroUsageStatisticsService heroUsageStatisticsService, ILogger<ClientRequesterController> logger) : ControllerBase
+public partial class ClientRequesterController(MerrickContext databaseContext, IDatabase distributedCache, HeroUsageStatisticsService heroUsageStatisticsService, ILogger<ClientRequesterController> logger, IWebHostEnvironment hostEnvironment, AuthenticationAttemptLimiter authenticationAttemptLimiter) : ControllerBase
 {
     # region Client Requester Controller Description
     /*
@@ -23,6 +23,8 @@ public partial class ClientRequesterController(MerrickContext databaseContext, I
     private IDatabase DistributedCache { get; } = distributedCache;
     private HeroUsageStatisticsService HeroUsageStatistics { get; } = heroUsageStatisticsService;
     private ILogger Logger { get; } = logger;
+    private IWebHostEnvironment HostEnvironment { get; } = hostEnvironment;
+    private AuthenticationAttemptLimiter AuthenticationAttemptLimiter { get; } = authenticationAttemptLimiter;
 
     [HttpPost(Name = "Client Requester All-In-One")]
     public async Task<IActionResult> ClientRequester()

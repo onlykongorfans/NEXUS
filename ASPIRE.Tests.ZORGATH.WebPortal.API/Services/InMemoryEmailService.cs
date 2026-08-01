@@ -28,11 +28,10 @@ public sealed class InMemoryEmailService : IEmailService
     public Task<bool> SendEmailAddressRegistrationConfirmation(string emailAddress, string accountName)
         => Record(emailAddress, EmailKind.EmailAddressRegistrationConfirmation, new Dictionary<string, string> { ["AccountName"] = accountName });
 
-    public Task<bool> SendAccountPasswordResetLink(string emailAddress, string token, string generatedPassword, List<string> accountNames)
+    public Task<bool> SendAccountPasswordResetLink(string emailAddress, string token, List<string> accountNames)
         => Record(emailAddress, EmailKind.AccountPasswordResetLink, new Dictionary<string, string>
         {
             ["Token"] = token,
-            ["GeneratedPassword"] = generatedPassword,
             ["AccountNames"] = string.Join(",", accountNames)
         });
 

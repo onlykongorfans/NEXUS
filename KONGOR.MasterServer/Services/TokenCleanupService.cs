@@ -52,7 +52,7 @@ public class TokenCleanupService(IServiceProvider serviceProvider, ILogger<Token
 
         // Filter By "TimestampCreated + Validity" Which Can Now Be Performed In Memory Following The Conversion Of The Validity Property From Ticks Back To TimeSpan
         List<Token> expiredTokens = unconsumedTokens
-            .Where(token => token.TimestampCreated + token.Validity < now)
+            .Where(token => token.IsExpiredAt(now))
             .ToList();
 
         if (expiredTokens.Count is 0)

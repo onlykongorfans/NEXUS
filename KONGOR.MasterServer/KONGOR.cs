@@ -69,31 +69,41 @@ public class KONGOR
         // Add Memory Cache Service
         builder.Services.AddMemoryCache();
 
+        // Add Account-Scoped Authentication Rate Limiter
+        builder.Services.AddSingleton<AuthenticationAttemptLimiter>();
+
         // Register The Hero Usage Statistics Service Which Aggregates Global Per-Hero Win/Loss Totals For The Hero Usage List
         builder.Services.AddScoped<HeroUsageStatisticsService>();
 
         // Add Rate Limiting Service To Protect Against Abuse And DoS Attacks
         builder.Services.AddRateLimiter(options =>
         {
-            // Relaxed Limits For General API Endpoints
-            options.AddSlidingWindowLimiter(policyName: RateLimiterPolicies.Relaxed, policy =>
-            {
-                policy.PermitLimit = 100;
-                policy.Window = TimeSpan.FromMinutes(1);
-                policy.SegmentsPerWindow = 6; // 10 Seconds Per Sliding Window Segment
-                policy.QueueLimit = 10;
-                policy.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-            });
+            static string ClientPartitionKey(HttpContext context)
+                => context.Connection.RemoteIpAddress.ToRateLimitPartitionKey();
 
-            // Strict Limits For Authentication And Other Sensitive Endpoints
-            options.AddSlidingWindowLimiter(policyName: RateLimiterPolicies.Strict, policy =>
-            {
-                policy.PermitLimit = 5;
-                policy.Window = TimeSpan.FromMinutes(1);
-                policy.SegmentsPerWindow = 6; // 10 Seconds Per Sliding Window Segment
-                policy.QueueLimit = 0;
-                policy.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-            });
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+            // Relaxed Limits For General API Endpoints, Independently Accounted Per Verified Client IP Address
+            options.AddPolicy(RateLimiterPolicies.Relaxed, context =>
+                RateLimitPartition.GetSlidingWindowLimiter(ClientPartitionKey(context), _ => new SlidingWindowRateLimiterOptions
+                {
+                    PermitLimit = 100,
+                    Window = TimeSpan.FromMinutes(1),
+                    SegmentsPerWindow = 6, // 10 Seconds Per Sliding Window Segment
+                    QueueLimit = 10,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                }));
+
+            // Strict Limits For Authentication And Other Sensitive Endpoints, Independently Accounted Per Verified Client IP Address
+            options.AddPolicy(RateLimiterPolicies.Strict, context =>
+                RateLimitPartition.GetSlidingWindowLimiter(ClientPartitionKey(context), _ => new SlidingWindowRateLimiterOptions
+                {
+                    PermitLimit = 5,
+                    Window = TimeSpan.FromMinutes(1),
+                    SegmentsPerWindow = 6, // 10 Seconds Per Sliding Window Segment
+                    QueueLimit = 0,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                }));
         });
 
         // Add HTTP Request/Response Logging For Debugging In Development
@@ -116,29 +126,32 @@ public class KONGOR
         if (builder.Environment.IsDevelopment())
             builder.Services.AddProblemDetails();
 
-        // Add Swagger/OpenAPI Documentation Generation
-        builder.Services.AddSwaggerGen(options =>
+        // Add Swagger/OpenAPI Documentation Generation In Development Only
+        if (builder.Environment.IsDevelopment())
         {
-            // Configure API Documentation Metadata
-            options.SwaggerDoc("v1", new OpenApiInfo
+            builder.Services.AddSwaggerGen(options =>
             {
-                Title = "KONGOR Master Server API",
-                Version = "v1",
-
-                License = new OpenApiLicense
+                // Configure API Documentation Metadata
+                options.SwaggerDoc("v1", new OpenApiInfo
                 {
-                    Name = "Project KONGOR Open-Source License",
-                    Url = new Uri("https://github.com/Project-KONGOR-Open-Source/ASPIRE/blob/main/license")
-                },
+                    Title = "KONGOR Master Server API",
+                    Version = "v1",
 
-                Contact = new OpenApiContact
-                {
-                    Name = "[K]ONGOR",
-                    Url = new Uri("https://github.com/K-O-N-G-O-R"),
-                    Email = "project.kongor@proton.me"
-                }
+                    License = new OpenApiLicense
+                    {
+                        Name = "Project KONGOR Open-Source License",
+                        Url = new Uri("https://github.com/Project-KONGOR-Open-Source/ASPIRE/blob/main/license")
+                    },
+
+                    Contact = new OpenApiContact
+                    {
+                        Name = "[K]ONGOR",
+                        Url = new Uri("https://github.com/K-O-N-G-O-R"),
+                        Email = "project.kongor@proton.me"
+                    }
+                });
             });
-        });
+        }
 
         // Configure Forwarded Headers For Reverse Proxy Support
         builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -193,22 +206,25 @@ public class KONGOR
             application.UseExceptionHandler("/error");
         }
 
-        // Enable Swagger API Documentation
-        application.UseSwagger();
-
-        // Configure Swagger UI With Custom Styling
-        application.UseSwaggerUI(options =>
+        if (application.Environment.IsDevelopment())
         {
-            options.InjectStylesheet("swagger.css");
-            options.DocumentTitle = "KONGOR Master Server API";
-        });
+            // Enable Swagger API Documentation
+            application.UseSwagger();
 
-        // Serve Static Files For Swagger CSS
-        application.UseStaticFiles(new StaticFileOptions
-        {
-            FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "Resources", "CSS")),
-            RequestPath = "/swagger"
-        });
+            // Configure Swagger UI With Custom Styling
+            application.UseSwaggerUI(options =>
+            {
+                options.InjectStylesheet("swagger.css");
+                options.DocumentTitle = "KONGOR Master Server API";
+            });
+
+            // Serve Static Files For Swagger CSS
+            application.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "Resources", "CSS")),
+                RequestPath = "/swagger"
+            });
+        }
 
         // Enable Rate Limiting (Before Other Processing)
         application.UseRateLimiter();

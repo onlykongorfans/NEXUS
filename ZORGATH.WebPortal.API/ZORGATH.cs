@@ -7,8 +7,15 @@ public class ZORGATH
         // Create The Application Builder
         WebApplicationBuilder builder = WebApplication.CreateBuilder(arguments);
 
+        IConfigurationSection operationalConfigurationSection = builder.Configuration.GetRequiredSection(OperationalConfiguration.ConfigurationSection);
+        OperationalConfiguration operationalConfiguration = operationalConfigurationSection.Get<OperationalConfiguration>()
+            ?? throw new InvalidOperationException("Operational Configuration Is Not Configured");
+
+        if (Encoding.UTF8.GetByteCount(operationalConfiguration.JWT.SigningKey) < 32)
+            throw new InvalidOperationException("JWT Signing Key Must Be At Least 256 Bits For HS256");
+
         // Map User-Defined Configuration Section
-        builder.Services.Configure<OperationalConfiguration>(builder.Configuration.GetRequiredSection(OperationalConfiguration.ConfigurationSection));
+        builder.Services.Configure<OperationalConfiguration>(operationalConfigurationSection);
 
         // Add Aspire Service Defaults
         builder.AddServiceDefaults();
@@ -46,28 +53,38 @@ public class ZORGATH
         // Add Memory Cache Service
         builder.Services.AddMemoryCache();
 
+        // Add Account-Scoped Authentication Rate Limiter
+        builder.Services.AddSingleton<AuthenticationAttemptLimiter>();
+
         // Add Rate Limiting Service To Protect Against Abuse And DoS Attacks
         builder.Services.AddRateLimiter(options =>
         {
-            // Relaxed Limits For General API Endpoints
-            options.AddSlidingWindowLimiter(policyName: RateLimiterPolicies.Relaxed, policy =>
-            {
-                policy.PermitLimit = 100;
-                policy.Window = TimeSpan.FromMinutes(1);
-                policy.SegmentsPerWindow = 6; // 10 Seconds Per Sliding Window Segment
-                policy.QueueLimit = 10;
-                policy.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-            });
+            static string ClientPartitionKey(HttpContext context)
+                => context.Connection.RemoteIpAddress.ToRateLimitPartitionKey();
 
-            // Strict Limits For Authentication And Other Sensitive Endpoints
-            options.AddSlidingWindowLimiter(policyName: RateLimiterPolicies.Strict, policy =>
-            {
-                policy.PermitLimit = 5;
-                policy.Window = TimeSpan.FromMinutes(1);
-                policy.SegmentsPerWindow = 6; // 10 Seconds Per Sliding Window Segment
-                policy.QueueLimit = 0;
-                policy.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-            });
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+            // Relaxed Limits For General API Endpoints, Independently Accounted Per Verified Client IP Address
+            options.AddPolicy(RateLimiterPolicies.Relaxed, context =>
+                RateLimitPartition.GetSlidingWindowLimiter(ClientPartitionKey(context), _ => new SlidingWindowRateLimiterOptions
+                {
+                    PermitLimit = 100,
+                    Window = TimeSpan.FromMinutes(1),
+                    SegmentsPerWindow = 6, // 10 Seconds Per Sliding Window Segment
+                    QueueLimit = 10,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                }));
+
+            // Strict Limits For Authentication And Other Sensitive Endpoints, Independently Accounted Per Verified Client IP Address
+            options.AddPolicy(RateLimiterPolicies.Strict, context =>
+                RateLimitPartition.GetSlidingWindowLimiter(ClientPartitionKey(context), _ => new SlidingWindowRateLimiterOptions
+                {
+                    PermitLimit = 5,
+                    Window = TimeSpan.FromMinutes(1),
+                    SegmentsPerWindow = 6, // 10 Seconds Per Sliding Window Segment
+                    QueueLimit = 0,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                }));
         });
 
         // Add HTTP Request/Response Logging For Debugging In Development
@@ -86,7 +103,7 @@ public class ZORGATH
         // Set CORS Origins
         string[] corsOrigins = builder.Environment.IsDevelopment()
             ? [ "https://localhost:5553",      "https://localhost:5554",  "http://localhost:5555", "https://localhost:5556",        "https://localhost:5557"    ]
-            : [ "https://database.kongor.net", "https://chat.kongor.net", "http://api.kongor.net", "https://portal.api.kongor.net", "https://portal.kongor.net" ];
+            : [ "https://portal.kongor.fans" ];
 
         // Add CORS Policy To Allow Cross-Origin Requests
         builder.Services.AddCors(options =>
@@ -148,55 +165,58 @@ public class ZORGATH
         if (builder.Environment.IsDevelopment())
             builder.Services.AddProblemDetails();
 
-        // Add Swagger/OpenAPI Documentation Generation
-        builder.Services.AddSwaggerGen(options =>
+        // Add Swagger/OpenAPI Documentation Generation In Development Only
+        if (builder.Environment.IsDevelopment())
         {
-            // Configure API Documentation Metadata
-            options.SwaggerDoc("v1", new OpenApiInfo
+            builder.Services.AddSwaggerGen(options =>
             {
-                Title = "ZORGATH Web Portal API",
-                Version = "v1",
-
-                License = new OpenApiLicense
+                // Configure API Documentation Metadata
+                options.SwaggerDoc("v1", new OpenApiInfo
                 {
-                    Name = "Project KONGOR Open-Source License",
-                    Url = new Uri("https://github.com/Project-KONGOR-Open-Source/ASPIRE/blob/main/license")
-                },
+                    Title = "ZORGATH Web Portal API",
+                    Version = "v1",
 
-                Contact = new OpenApiContact
+                    License = new OpenApiLicense
+                    {
+                        Name = "Project KONGOR Open-Source License",
+                        Url = new Uri("https://github.com/Project-KONGOR-Open-Source/ASPIRE/blob/main/license")
+                    },
+
+                    Contact = new OpenApiContact
+                    {
+                        Name = "[K]ONGOR",
+                        Url = new Uri("https://github.com/K-O-N-G-O-R"),
+                        Email = "project.kongor@proton.me"
+                    }
+                });
+
+                // Add JWT Bearer Authentication To Swagger UI
+                options.AddSecurityDefinition(JwtBearerDefaults.AuthenticationScheme, new OpenApiSecurityScheme
                 {
-                    Name = "[K]ONGOR",
-                    Url = new Uri("https://github.com/K-O-N-G-O-R"),
-                    Email = "project.kongor@proton.me"
-                }
-            });
+                    Description = "Insert A Valid JSON Web Token",
+                    Name = "Authorization",
+                    Type = SecuritySchemeType.Http,
+                    Scheme = JwtBearerDefaults.AuthenticationScheme,
+                    In = ParameterLocation.Header,
+                    BearerFormat = "JWT"
+                });
 
-            // Add JWT Bearer Authentication To Swagger UI
-            options.AddSecurityDefinition(JwtBearerDefaults.AuthenticationScheme, new OpenApiSecurityScheme
-            {
-                Description = "Insert A Valid JSON Web Token",
-                Name = "Authorization",
-                Type = SecuritySchemeType.Http,
-                Scheme = JwtBearerDefaults.AuthenticationScheme,
-                In = ParameterLocation.Header,
-                BearerFormat = "JWT"
-            });
-
-            // Configure Security Requirements For All Endpoints
-            options.AddSecurityRequirement(document =>
-            {
-                OpenApiSecuritySchemeReference schemeReference = new (JwtBearerDefaults.AuthenticationScheme, document);
-
-                List<string> requiredScopes = []; // No Scopes Required, Just A Valid JWT
-
-                OpenApiSecurityRequirement securityRequirement = new ()
+                // Configure Security Requirements For All Endpoints
+                options.AddSecurityRequirement(document =>
                 {
-                    { schemeReference, requiredScopes }
-                };
+                    OpenApiSecuritySchemeReference schemeReference = new (JwtBearerDefaults.AuthenticationScheme, document);
 
-                return securityRequirement;
+                    List<string> requiredScopes = []; // No Scopes Required, Just A Valid JWT
+
+                    OpenApiSecurityRequirement securityRequirement = new ()
+                    {
+                        { schemeReference, requiredScopes }
+                    };
+
+                    return securityRequirement;
+                });
             });
-        });
+        }
 
         // Add Email Service With Local STMP Server In Development
         if (builder.Environment.IsDevelopment())
@@ -207,7 +227,7 @@ public class ZORGATH
         // Add Email Service With AWS SES In Staging/Production/etc.
         else
         {
-            builder.Services.AddSingleton<IEmailService, AWSSESEmailService>();
+            builder.Services.AddSingleton<IEmailService, SMTPRelayEmailService>();
         }
 
         // Configure Forwarded Headers For Reverse Proxy Support
@@ -255,22 +275,25 @@ public class ZORGATH
             application.UseExceptionHandler("/error");
         }
 
-        // Enable Swagger API Documentation
-        application.UseSwagger();
-
-        // Configure Swagger UI With Custom Styling
-        application.UseSwaggerUI(options =>
+        if (application.Environment.IsDevelopment())
         {
-            options.InjectStylesheet("swagger.css");
-            options.DocumentTitle = "ZORGATH Web Portal API";
-        });
+            // Enable Swagger API Documentation
+            application.UseSwagger();
 
-        // Serve Static Files For Swagger CSS
-        application.UseStaticFiles(new StaticFileOptions
-        {
-            FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "Resources", "CSS")),
-            RequestPath = "/swagger"
-        });
+            // Configure Swagger UI With Custom Styling
+            application.UseSwaggerUI(options =>
+            {
+                options.InjectStylesheet("swagger.css");
+                options.DocumentTitle = "ZORGATH Web Portal API";
+            });
+
+            // Serve Static Files For Swagger CSS
+            application.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "Resources", "CSS")),
+                RequestPath = "/swagger"
+            });
+        }
 
         // Enable Rate Limiting (Before Other Processing)
         application.UseRateLimiter();

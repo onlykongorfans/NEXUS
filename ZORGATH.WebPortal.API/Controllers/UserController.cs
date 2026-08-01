@@ -4,13 +4,14 @@
 [Route("[controller]")]
 [Consumes("application/json")]
 [EnableRateLimiting(RateLimiterPolicies.Strict)]
-public class UserController(MerrickContext databaseContext, ILogger<UserController> logger, IEmailService emailService, IOptions<OperationalConfiguration> configuration, IWebHostEnvironment hostEnvironment) : ControllerBase
+public class UserController(MerrickContext databaseContext, ILogger<UserController> logger, IEmailService emailService, IOptions<OperationalConfiguration> configuration, IWebHostEnvironment hostEnvironment, AuthenticationAttemptLimiter authenticationAttemptLimiter) : ControllerBase
 {
     private MerrickContext MerrickContext { get; } = databaseContext;
     private ILogger Logger { get; } = logger;
     private IEmailService EmailService { get; } = emailService;
     private OperationalConfiguration Configuration { get; } = configuration.Value;
     private IWebHostEnvironment HostEnvironment { get; } = hostEnvironment;
+    private AuthenticationAttemptLimiter AuthenticationAttemptLimiter { get; } = authenticationAttemptLimiter;
 
     [HttpPost("Register", Name = "Register User And Main Account")]
     [AllowAnonymous]
@@ -51,6 +52,14 @@ public class UserController(MerrickContext databaseContext, ILogger<UserControll
             return Conflict($@"Email Registration Token ""{payload.Token}"" Has Already Been Consumed");
         }
 
+        if (token.IsExpiredAt(DateTimeOffset.UtcNow))
+        {
+            MerrickContext.Tokens.Remove(token);
+            await MerrickContext.SaveChangesAsync();
+
+            return BadRequest($@"Email Registration Token ""{payload.Token}"" Has Expired");
+        }
+
         string sanitisedEmailAddress = token.Data;
 
         if (await MerrickContext.Users.AnyAsync(user => user.EmailAddress.Equals(sanitisedEmailAddress)))
@@ -70,7 +79,7 @@ public class UserController(MerrickContext databaseContext, ILogger<UserControll
             return NotFound($@"User Role ""{UserRoles.User}"" Was Not Found");
         }
 
-        string salt = SRPRegistrationHandlers.GenerateSRPPasswordSalt();
+        string salt = SRPPasswordHandlers.GenerateSRPPasswordSalt();
 
         SignupRewards signupRewards = JSONConfiguration.EconomyConfiguration.SignupRewards;
 
@@ -79,7 +88,7 @@ public class UserController(MerrickContext databaseContext, ILogger<UserControll
             EmailAddress = sanitisedEmailAddress,
             Role = role,
             SRPPasswordSalt = salt,
-            SRPPasswordHash = SRPRegistrationHandlers.ComputeSRPPasswordHash(payload.Password, salt),
+            SRPPasswordHash = SRPPasswordHandlers.ComputeSRPPasswordHash(payload.Password, salt),
             GoldCoins = signupRewards.GoldCoins,
             SilverCoins = signupRewards.SilverCoins,
             PlinkoTickets = signupRewards.PlinkoTickets
@@ -125,6 +134,17 @@ public class UserController(MerrickContext databaseContext, ILogger<UserControll
             return NotFound($@"Account ""{payload.Name}"" Was Not Found");
 
         User user = account.User;
+
+        // Quick-Play Guest Accounts Must Not Be Usable On The Production Portal; MODERATOR Remains Available After Its Shared User Password Is Rotated At Production Startup.
+        if (HostEnvironment.IsProduction() && account.Type is AccountType.Guest)
+            return Unauthorized("Invalid User Name And/Or Password");
+
+        if (AuthenticationAttemptLimiter.RequestIsAllowed(account.Name) is false)
+        {
+            Logger.LogWarning(@"Account ""{AccountName}"" Exceeded The Account-Scoped Authentication Attempt Limit", account.Name);
+
+            return StatusCode(StatusCodes.Status429TooManyRequests, "Too Many Authentication Attempts");
+        }
 
         PasswordVerificationResult result = new PasswordHasher<User>().VerifyHashedPassword(user, user.PBKDF2PasswordHash, payload.Password);
 
