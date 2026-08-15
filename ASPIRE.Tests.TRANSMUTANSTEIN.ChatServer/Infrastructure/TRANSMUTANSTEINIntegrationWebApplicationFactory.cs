@@ -2,7 +2,7 @@ namespace ASPIRE.Tests.TRANSMUTANSTEIN.ChatServer.Infrastructure;
 
 /// <summary>
 ///     Integration test <see cref="WebApplicationFactory{TEntryPoint}"/> for the TRANSMUTANSTEIN chat server.
-///     The chat server is a background-worker host with no HTTP surface beyond <c>/health</c>; tests exercise behaviour by resolving the registered <see cref="IHostedService"/> instances directly rather than driving traffic through an <see cref="HttpClient"/>.
+///     The chat server is primarily a background-worker host, with a small HTTP surface for health and operational diagnostics; tests exercise other behaviour by resolving the registered <see cref="IHostedService"/> instances directly rather than driving traffic through an <see cref="HttpClient"/>.
 /// </summary>
 public sealed class TRANSMUTANSTEINIntegrationWebApplicationFactory(ServiceContainerContext containerContext)
     : ServiceIntegrationWebApplicationFactory<TRANSMUTANSTEINIntegrationWebApplicationFactory, TRANSMUTANSTEINAssemblyMarker>(containerContext)

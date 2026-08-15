@@ -199,6 +199,15 @@ public class TRANSMUTANSTEIN
         // Map Aspire Default Health Check Endpoints
         application.MapDefaultEndpoints();
 
+        // Expose A Read-Only Snapshot Of The Process-Local Matchmaking Queue For Trusted Operational Diagnostics
+        application.MapGet("/diagnostics/matchmaking/queue", (HttpContext context) =>
+        {
+            // Queue Membership Changes Frequently And Contains Player Information, So Neither Browsers Nor Intermediaries Should Retain A Response
+            context.Response.Headers.CacheControl = "no-store";
+
+            return Results.Ok(MatchmakingQueueDiagnostics.Capture());
+        });
+
         return application;
     }
 }

@@ -15,6 +15,11 @@ public class MatchmakingGroup
 
     public required List<MatchmakingGroupMember> Members { get; set; }
 
+    /// <summary>
+    ///     Synchronises membership mutations with consumers which require a stable member snapshot.
+    /// </summary>
+    private Lock MembershipLock { get; } = new ();
+
     public required MatchmakingGroupInformation Information { get; set; }
 
     /// <summary>
@@ -258,16 +263,19 @@ public class MatchmakingGroup
             GameModeAccess = Leader.GameModeAccess
         };
 
-        if (Members.Any(member => member.Account.ID == session.Account.ID) is false)
+        lock (MembershipLock)
         {
-            Members.Add(newMatchmakingGroupMember);
-        }
+            if (Members.Any(member => member.Account.ID == session.Account.ID) is false)
+            {
+                Members.Add(newMatchmakingGroupMember);
+            }
 
-        else
-        {
-            Log.Warning(@"Player ""{AccountName}"" Tried To Join A Matchmaking Group They Are Already In", session.Account.Name);
+            else
+            {
+                Log.Warning(@"Player ""{AccountName}"" Tried To Join A Matchmaking Group They Are Already In", session.Account.Name);
 
-            return this;
+                return this;
+            }
         }
 
         // Create The Group Chat Channel When The Second Member Joins
@@ -712,7 +720,8 @@ public class MatchmakingGroup
         }
 
         // Remove Member From Group
-        Members.Remove(memberToRemove);
+        lock (MembershipLock)
+            Members.Remove(memberToRemove);
 
         // Dispose The Group Chat Channel When The Group Drops To One Or Fewer Members
         if (Members.Count <= 1 && ChatChannel is not null)
@@ -800,19 +809,31 @@ public class MatchmakingGroup
     /// </summary>
     private void ReassignSlots()
     {
-        if (Members.Count == 0)
+        lock (MembershipLock)
         {
-            Log.Error(@"[BUG] Attempted To Reassign Slots In Empty Matchmaking Group GUID ""{GroupGUID}""", GUID);
+            if (Members.Count == 0)
+            {
+                Log.Error(@"[BUG] Attempted To Reassign Slots In Empty Matchmaking Group GUID ""{GroupGUID}""", GUID);
 
-            return;
+                return;
+            }
+
+            Members = [.. Members.OrderBy(member => member.Slot)];
+
+            foreach (MatchmakingGroupMember member in Members)
+                member.Slot = Convert.ToByte(Members.IndexOf(member) + 1);
+
+            Members.Single(member => member.Slot is 1).IsLeader = true;
         }
+    }
 
-        Members = [.. Members.OrderBy(member => member.Slot)];
-
-        foreach (MatchmakingGroupMember member in Members)
-            member.Slot = Convert.ToByte(Members.IndexOf(member) + 1);
-
-        Members.Single(member => member.Slot is 1).IsLeader = true;
+    /// <summary>
+    ///     Captures the current group membership without allowing a concurrent join, removal, or slot reassignment to modify the underlying list during the copy.
+    /// </summary>
+    internal MatchmakingGroupMember[] CaptureMemberSnapshot()
+    {
+        lock (MembershipLock)
+            return Members.ToArray();
     }
 
     /// <summary>

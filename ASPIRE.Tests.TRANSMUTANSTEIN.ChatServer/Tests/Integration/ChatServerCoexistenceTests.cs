@@ -8,13 +8,15 @@ namespace ASPIRE.Tests.TRANSMUTANSTEIN.ChatServer.Tests.Integration;
 public sealed class ChatServerCoexistenceTests(ServiceContainerContext containerContext)
 {
     [Test]
-    public async Task Health_Endpoint_And_Chat_Port_Both_Respond_On_The_Same_Host()
+    public async Task HTTP_Endpoints_And_Chat_Port_Respond_On_The_Same_Host()
     {
         await using ChatServerHost host = await ChatServerHost.StartAsync(containerContext);
 
         using HttpClient httpClient = host.CreateHTTPClient();
 
         HttpResponseMessage healthResponse = await httpClient.GetAsync("/health");
+        HttpResponseMessage queueDiagnosticsResponse = await httpClient.GetAsync("/diagnostics/matchmaking/queue");
+        string queueDiagnosticsBody = await queueDiagnosticsResponse.Content.ReadAsStringAsync();
 
         using TcpClient tcpClient = await host.ConnectClientAsync();
 
@@ -28,6 +30,9 @@ public sealed class ChatServerCoexistenceTests(ServiceContainerContext container
         using (Assert.Multiple())
         {
             await Assert.That(healthResponse.IsSuccessStatusCode).IsTrue();
+            await Assert.That(queueDiagnosticsResponse.IsSuccessStatusCode).IsTrue();
+            await Assert.That(queueDiagnosticsResponse.Headers.CacheControl?.NoStore is true).IsTrue();
+            await Assert.That(queueDiagnosticsBody.Contains("\"queuedPlayerCount\"", StringComparison.Ordinal)).IsTrue();
             await Assert.That(BitConverter.ToUInt16(payload, 0)).IsEqualTo((ushort) ChatProtocol.Bidirectional.NET_CHAT_PONG);
         }
     }
