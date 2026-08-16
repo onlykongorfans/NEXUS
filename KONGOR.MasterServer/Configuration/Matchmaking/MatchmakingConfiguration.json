@@ -7,7 +7,7 @@
             "Map": "caldavar",
             "GameTypes": [ 6, 7 ],
             "Modes": [ "rb" ],
-            "Regions": [ "EU", "RU", "TH", "PH", "AU", "USW", "USE", "LAT", "NEWERTH" ],
+            "Regions": [ "EU", "RU", "TH", "PH", "AU", "USW", "USE", "LAT", "BR", "NEWERTH" ],
             "Match": {
                 "MaximumPlayerRatingDifference": 250,
                 "IsRanked": true
@@ -17,7 +17,7 @@
             "Map": "midwars",
             "GameTypes": [ 3 ],
             "Modes": [ "hb", "sd" ],
-            "Regions": [ "EU", "RU", "TH", "PH", "AU", "USW", "USE", "LAT", "NEWERTH" ],
+            "Regions": [ "EU", "RU", "TH", "PH", "AU", "USW", "USE", "LAT", "BR", "NEWERTH" ],
             "Match": {
                 "MaximumPlayerRatingDifference": 250,
                 "IsRanked": true
@@ -27,7 +27,7 @@
             "Map": "riftwars",
             "GameTypes": [ 4 ],
             "Modes": [ "km" ],
-            "Regions": [ "EU", "RU", "TH", "PH", "AU", "USW", "USE", "LAT", "NEWERTH" ],
+            "Regions": [ "EU", "RU", "TH", "PH", "AU", "USW", "USE", "LAT", "BR", "NEWERTH" ],
             "Match": {
                 "MaximumPlayerRatingDifference": 250,
                 "IsRanked": false
