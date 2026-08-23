@@ -7,9 +7,8 @@ public class LeaveChannel : ISynchronousCommandProcessor<ClientChatSession>
     {
         LeaveChannelRequestData requestData = new (buffer);
 
-        ChatChannel
-            .Get(session, requestData.ChannelName)
-            .Leave(session);
+        if (ChatChannel.TryGet(session, requestData.ChannelName, out ChatChannel? channel) && channel is not null)
+            channel.Leave(session);
     }
 }
 

@@ -167,6 +167,20 @@ public class ChatChannel
         return channel;
     }
 
+    public static bool TryGet(ClientChatSession session, OneOf<string, int> channelIdentifier, out ChatChannel? channel)
+    {
+        channel = channelIdentifier.Match
+        (
+            channelName => Context.ChatChannels.Values
+                .SingleOrDefault(channel => channel.Name == channelName && channel.Members.ContainsKey(session.Account.Name)),
+
+            channelID => Context.ChatChannels.Values
+                .SingleOrDefault(channel => channel.ID == channelID && channel.Members.ContainsKey(session.Account.Name))
+        );
+
+        return channel is not null;
+    }
+
     public ChatChannel Join(ClientChatSession session, string? providedPassword = null)
     {
         // Staff Accounts Are Exempt From Channel Limit Restrictions, For Moderation And Administration Purposes
