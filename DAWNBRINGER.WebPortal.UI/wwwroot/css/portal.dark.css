@@ -3,7 +3,6 @@
 
    Defines the CSS custom properties consumed by the rules in portal.common.css.
    Also defines the dark-mode keyframes and theme-scoped animation-name bindings for glow/pulse effects.
-   The palette is the dark-mode counterpart to portal.light.css and mirrors it variable-for-variable.
    ===================================================================================================== */
 
 .dark-mode {

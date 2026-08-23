@@ -5,30 +5,72 @@
    JS counterpart to ../css/cursor.css.
    =========================================================== */
 
-// when TRUE, each dye splat is a random shade of a single theme-appropriate base colour
-// when FALSE (default), splats cycle through full-spectrum random hues for a "rainbow" effect
-const USE_MONOCHROME = true;
-
-// monochrome base colours; applied only when USE_MONOCHROME is TRUE
-const MONOCHROME_BASE_DARK_MODE = { r: 0x00 / 255, g: 0xE6 / 255, b: 0x76 / 255 }; // vivid-green base for the dark theme (theme primary)
-const MONOCHROME_BASE_LIGHT_MODE = { r: 0x19 / 255, g: 0x76 / 255, b: 0xD2 / 255 }; // portal-blue base for the light theme (theme primary)
+const CURSOR_TRAIL_STORAGE_KEY = 'project-kongor-cursor-trail-enabled';
+const COLOUR_TRANSITION_SECONDS = 30;
 
 let trailActive = false;
 let trailInitialised = false;
+let stopTrailAnimation = () => { };
 
-function setTrailActive(active) {
-    trailActive = active;
-    const canvas = document.getElementById('fluid');
-    if (canvas !== null) canvas.style.visibility = active ? 'visible' : 'hidden';
-    if (active && !trailInitialised) {
-        trailInitialised = true;
-        initFluid();
+function readTrailPreference() {
+    try {
+        const preference = window.localStorage.getItem(CURSOR_TRAIL_STORAGE_KEY);
+        return preference === null ? null : preference === 'true';
+    }
+    catch {
+        return null;
     }
 }
 
+function writeTrailPreference(active) {
+    try {
+        window.localStorage.setItem(CURSOR_TRAIL_STORAGE_KEY, active.toString());
+    }
+    catch {
+        // The trail still works when browser storage is unavailable.
+    }
+}
+
+function shouldEnableTrailByDefault() {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+        return false;
+
+    const preference = readTrailPreference();
+    if (preference !== null)
+        return preference;
+
+    return true;
+}
+
+function setTrailActive(active, persistPreference = false) {
+    const canvas = document.getElementById('fluid');
+
+    if (active && !trailInitialised) {
+        try {
+            trailInitialised = initFluid();
+        }
+        catch (error) {
+            console.warn('The mystical cursor trail could not be initialised.', error);
+            trailInitialised = false;
+        }
+    }
+
+    trailActive = active && trailInitialised;
+    if (!trailActive)
+        stopTrailAnimation();
+
+    if (canvas !== null)
+        canvas.style.visibility = trailActive ? 'visible' : 'hidden';
+
+    if (persistPreference)
+        writeTrailPreference(trailActive);
+
+    return trailActive;
+}
+
 window.CursorTrail = {
-    enable() { setTrailActive(true); },
-    disable() { setTrailActive(false); },
+    enable() { return setTrailActive(true, true); },
+    disable() { return setTrailActive(false, true); },
     isEnabled() { return trailActive; }
 };
 
@@ -39,7 +81,7 @@ const initFluid = () => {
 
     let config = {
         SIM_RESOLUTION: 128,
-        DYE_RESOLUTION: 1440,
+        DYE_RESOLUTION: window.matchMedia('(pointer: fine)').matches ? 1024 : 512,
         CAPTURE_RESOLUTION: 512,
         DENSITY_DISSIPATION: 3.5,
         VELOCITY_DISSIPATION: 2,
@@ -49,7 +91,7 @@ const initFluid = () => {
         SPLAT_RADIUS: 0.5,
         SPLAT_FORCE: 6000,
         SHADING: true,
-        COLOR_UPDATE_SPEED: 10,
+        COLOR_UPDATE_SPEED: 30,
         PAUSED: false,
         BACK_COLOR: { r: 0, g: 0, b: 0 },
         TRANSPARENT: true,
@@ -71,7 +113,11 @@ const initFluid = () => {
     let pointers = [];
     pointers.push(new pointerPrototype());
 
-    const { gl, ext } = getWebGLContext(canvas);
+    const context = getWebGLContext(canvas);
+    if (context === null)
+        return false;
+
+    const { gl, ext } = context;
 
     if (!ext.supportLinearFiltering) {
         config.DYE_RESOLUTION = 512;
@@ -86,6 +132,9 @@ const initFluid = () => {
         if (!isWebGL2)
             gl = canvas.getContext('webgl', params) || canvas.getContext('experimental-webgl', params);
 
+        if (gl === null)
+            return null;
+
         let halfFloat;
         let supportLinearFiltering;
         if (isWebGL2) {
@@ -97,6 +146,9 @@ const initFluid = () => {
         }
 
         gl.clearColor(0.0, 0.0, 0.0, 1.0);
+
+        if (!isWebGL2 && halfFloat === null)
+            return null;
 
         const halfFloatTexType = isWebGL2 ? gl.HALF_FLOAT : halfFloat.HALF_FLOAT_OES;
         let formatRGBA;
@@ -783,21 +835,34 @@ const initFluid = () => {
     let lastUpdateTime = Date.now();
     let colorUpdateTimer = 0.0;
 
+    let animationFrameID = null;
+
+    function startAnimation() {
+        if (animationFrameID === null)
+            animationFrameID = requestAnimationFrame(update);
+    }
+
+    stopTrailAnimation = () => {
+        if (animationFrameID !== null)
+            cancelAnimationFrame(animationFrameID);
+
+        animationFrameID = null;
+    };
+
     function update() {
         if (!trailActive) {
-            lastUpdateTime = Date.now();
-            requestAnimationFrame(update);
+            animationFrameID = null;
             return;
         }
+
         const dt = calcDeltaTime();
-        // console.log(dt)
         if (resizeCanvas())
             initFramebuffers();
         updateColors(dt);
         applyInputs();
         step(dt);
         render(null);
-        requestAnimationFrame(update);
+        animationFrameID = requestAnimationFrame(update);
     }
 
     function calcDeltaTime() {
@@ -962,6 +1027,7 @@ const initFluid = () => {
 
     window.addEventListener('mousedown', e => {
         if (!trailActive) return;
+        startAnimation();
         let pointer = pointers[0];
         let posX = scaleByPixelRatio(e.clientX);
         let posY = scaleByPixelRatio(e.clientY);
@@ -970,37 +1036,18 @@ const initFluid = () => {
     });
 
     window.addEventListener('mousemove', e => {
+        if (!trailActive) return;
+        startAnimation();
         let pointer = pointers[0];
         let posX = scaleByPixelRatio(e.clientX);
         let posY = scaleByPixelRatio(e.clientY);
         let color = generateColor();
-        update();
-        updatePointerMoveData(pointer, posX, posY, color);
-    }, { once: true });
-
-    window.addEventListener('mousemove', e => {
-        if (!trailActive) return;
-        let pointer = pointers[0];
-        let posX = scaleByPixelRatio(e.clientX);
-        let posY = scaleByPixelRatio(e.clientY);
-        let color = pointer.color;
         updatePointerMoveData(pointer, posX, posY, color);
     });
 
     window.addEventListener('touchstart', e => {
-        const touches = e.targetTouches;
-        let touch = touches[0]
-        let pointer = pointers[0];
-        for (let i = 0; i < touches.length; i++) {
-            let posX = scaleByPixelRatio(touches[i].clientX);
-            let posY = scaleByPixelRatio(touches[i].clientY);
-            update();
-            updatePointerDownData(pointer, touches[i].identifier, posX, posY);
-        }
-    }, { once: true });
-
-    window.addEventListener('touchstart', e => {
         if (!trailActive) return;
+        startAnimation();
         const touches = e.targetTouches;
         let pointer = pointers[0];
         for (let i = 0; i < touches.length; i++) {
@@ -1072,22 +1119,17 @@ const initFluid = () => {
         return delta;
     }
 
-    function generateColor () {
-        if (USE_MONOCHROME) {
-            const isDarkMode = document.querySelector('.dark-mode') !== null;
-            const base = isDarkMode ? MONOCHROME_BASE_DARK_MODE : MONOCHROME_BASE_LIGHT_MODE;
-            const shade = Math.random();
-            return {
-                r: base.r * shade * 0.15,
-                g: base.g * shade * 0.15,
-                b: base.b * shade * 0.15
-            };
-        }
-        let c = HSVtoRGB(Math.random(), 1.0, 1.0);
-        c.r *= 0.15;
-        c.g *= 0.15;
-        c.b *= 0.15;
-        return c;
+    function generateColor() {
+        const elapsedSeconds = performance.now() / 1000;
+        const cyclePosition = (elapsedSeconds / COLOUR_TRANSITION_SECONDS) % 2;
+        const transitionProgress = cyclePosition <= 1 ? cyclePosition : 2 - cyclePosition;
+        const colour = HSVtoRGB((1 - transitionProgress) / 3, 1.0, 1.0);
+        const intensity = 0.1 + Math.random() * 0.05;
+
+        colour.r *= intensity;
+        colour.g *= intensity;
+        colour.b *= intensity;
+        return colour;
     }
 
     function HSVtoRGB(h, s, v) {
@@ -1148,4 +1190,8 @@ const initFluid = () => {
         }
         return hash;
     };
+
+    return true;
 };
+
+setTrailActive(shouldEnableTrailByDefault());

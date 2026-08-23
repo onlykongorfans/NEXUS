@@ -1,11 +1,11 @@
 @inherits LayoutComponentBase
 
-<MudThemeProvider @ref="ThemeProvider" Theme="Theme" IsDarkMode="IsDarkMode" />
+<MudThemeProvider Theme="Theme" IsDarkMode="true" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
-<div class="@ThemeClass">
+<div class="dark-mode">
 <MudLayout>
     <MudAppBar Elevation="0" Fixed="true" Class="kongor-appbar">
         <MudContainer MaxWidth="MaxWidth.Large" Class="d-flex align-center px-4 px-sm-6 py-0">
@@ -30,7 +30,7 @@
 
                     <MudButton Href="/downloads" Color="Color.Inherit" Variant="Variant.Text">Downloads</MudButton>
 
-                    <MudButton Href="https://github.com/Project-KONGOR-Open-Source" Target="_blank" Color="Color.Inherit" Variant="Variant.Text">Source Code</MudButton>
+                    <MudButton Href="/how-to-play" Color="Color.Inherit" Variant="Variant.Text">How To Play</MudButton>
 
                     <MudButton Href="https://codex.kongor.net" Target="_blank" Color="Color.Inherit" Variant="Variant.Text">Knowledge Base</MudButton>
                 </MudStack>
@@ -56,7 +56,6 @@
             <MudSpacer />
 
             <MudIconButton Icon="@CursorTrailIcon" Color="Color.Inherit" Size="Size.Large" OnClick="ToggleCursorTrail" />
-            <MudIconButton Icon="@ThemeIcon" Color="Color.Inherit" Edge="Edge.End" Size="Size.Large" OnClick="ToggleTheme" />
         </MudContainer>
     </MudAppBar>
 
@@ -68,7 +67,7 @@
                 <MudNavLink Href="https://www.reddit.com/r/newerth/" Target="_blank">Reddit</MudNavLink>
             </MudNavGroup>
             <MudNavLink Href="/downloads" Icon="@Icons.Material.Filled.Download">Downloads</MudNavLink>
-            <MudNavLink Href="https://github.com/Project-KONGOR-Open-Source" Target="_blank" Icon="@Icons.Material.Filled.Code">Source Code</MudNavLink>
+            <MudNavLink Href="/how-to-play" Icon="@Icons.Material.Filled.SportsEsports">How To Play</MudNavLink>
             <MudNavLink Href="https://codex.kongor.net" Target="_blank" Icon="@Icons.Material.Filled.MenuBook">Knowledge Base</MudNavLink>
 
             <MudDivider Class="my-2" />
@@ -87,16 +86,13 @@
             <MudDivider Class="my-2" />
 
             <MudNavLink Icon="@CursorTrailIcon" OnClick="ToggleCursorTrail">@(CursorTrailEnabled ? "Disable Trail" : "Enable Trail")</MudNavLink>
-            <MudNavLink Icon="@ThemeIcon" OnClick="ToggleTheme">@(IsDarkMode ? "Light Mode" : "Dark Mode")</MudNavLink>
         </MudNavMenu>
     </MudDrawer>
 
     <MudMainContent Style="@ContentStyle">
         <div class="d-flex flex-column" style="min-height: calc(100vh - 64px);">
             <div class="pt-6 flex-grow-1 d-flex flex-column justify-center">
-                <CascadingValue Name="IsDarkMode" Value="IsDarkMode">
-                    @Body
-                </CascadingValue>
+                @Body
             </div>
 
             <footer class="kongor-footer">
@@ -105,6 +101,7 @@
                     <MudStack Row="true" Justify="Justify.Center" Class="pb-2 flex-wrap gap-6">
                         <MudLink Href="/" Typo="Typo.body2" Color="Color.Inherit">Home</MudLink>
                         <MudLink Href="/downloads" Typo="Typo.body2" Color="Color.Inherit">Downloads</MudLink>
+                        <MudLink Href="/how-to-play" Typo="Typo.body2" Color="Color.Inherit">How To Play</MudLink>
                         <MudLink Href="https://codex.kongor.net" Target="_blank" Typo="Typo.body2" Color="Color.Inherit">Knowledge Base</MudLink>
                         <MudLink Href="https://discord.com/invite/N6pKzGDqUH" Target="_blank" Typo="Typo.body2" Color="Color.Inherit">Discord</MudLink>
                         <MudLink Href="https://app.element.io/#/room/#newerth:matrix.org" Target="_blank" Typo="Typo.body2" Color="Color.Inherit">Element</MudLink>
@@ -190,41 +187,6 @@
             GrayLighter = "#6B9E6B",
             GrayDark = "#1A3D1A",
             GrayDarker = "#0F260F"
-        },
-
-        PaletteLight = new PaletteLight
-        {
-            Primary = "#1976D2",
-            PrimaryContrastText = "#FFFFFF",
-            PrimaryDarken = "#1565C0",
-            PrimaryLighten = "#2196F3",
-            Secondary = "#C2185B",
-            SecondaryContrastText = "#FFFFFF",
-            SecondaryDarken = "#AD1457",
-            SecondaryLighten = "#E91E63",
-            Tertiary = "#6200EA",
-            TertiaryContrastText = "#FFFFFF",
-            Info = "#0277BD",
-            Success = "#2E7D32",
-            Warning = "#E65100",
-            Error = "#C62828",
-            Dark = "#0A1929",
-            Background = "#F8FAFC",
-            BackgroundGray = "#E3F2FD",
-            Surface = "#FFFFFF",
-            DrawerBackground = "#F8FAFC",
-            DrawerText = "#0A1929",
-            DrawerIcon = "#1976D2",
-            AppbarBackground = "#F8FAFC",
-            AppbarText = "#0A1929",
-            TextPrimary = "#0A1929",
-            TextSecondary = "#37474F",
-            TextDisabled = "#90A4AE80",
-            ActionDefault = "#37474F",
-            Divider = "#0A192933",
-            DividerLight = "#0A192922",
-            LinesDefault = "#37474F60",
-            LinesInputs = "#0A192960"
         },
 
         LayoutProperties = new LayoutProperties
@@ -348,45 +310,29 @@
         }
     };
 
-    private MudThemeProvider ThemeProvider { get; set; } = null!;
-
-    private bool IsDarkMode { get; set; } = true;
-
     private bool DrawerOpen { get; set; }
 
     private bool CursorTrailEnabled { get; set; }
-
-    private string ThemeIcon => IsDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode;
 
     private string CursorTrailIcon => CursorTrailEnabled ? Icons.Material.Filled.AutoFixHigh : Icons.Material.Filled.AutoFixOff;
 
     private Color AppBarButtonColour => Color.Primary;
 
-    private string ThemeClass => IsDarkMode ? "dark-mode" : "light-mode";
-
-    private string ContentStyle => IsDarkMode
-        ? "padding-top: 64px; min-height: 100vh; background: linear-gradient(rgba(10, 15, 13, 0.82), rgba(10, 15, 13, 0.92)), url('images/background.jpg') center/cover no-repeat fixed;"
-        : "padding-top: 64px; min-height: 100vh; background: linear-gradient(rgba(248, 250, 252, 0.88), rgba(248, 250, 252, 0.94)), url('images/background.jpg') center/cover no-repeat fixed;";
+    private const string ContentStyle = "padding-top: 64px; min-height: 100vh; background: linear-gradient(rgba(10, 15, 13, 0.82), rgba(10, 15, 13, 0.92)), url('images/background.jpg') center/cover no-repeat fixed;";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
-            IsDarkMode = await ThemeProvider.GetSystemDarkModeAsync();
             CursorTrailEnabled = await JSRuntime.InvokeAsync<bool>("CursorTrail.isEnabled");
             StateHasChanged();
         }
     }
 
-    private void ToggleTheme()
-    {
-        IsDarkMode = !IsDarkMode;
-    }
-
     private async Task ToggleCursorTrail()
     {
-        CursorTrailEnabled = !CursorTrailEnabled;
-        await JSRuntime.InvokeVoidAsync(CursorTrailEnabled ? "CursorTrail.enable" : "CursorTrail.disable");
+        bool enableCursorTrail = !CursorTrailEnabled;
+        CursorTrailEnabled = await JSRuntime.InvokeAsync<bool>(enableCursorTrail ? "CursorTrail.enable" : "CursorTrail.disable");
     }
 
     private void ToggleDrawer()

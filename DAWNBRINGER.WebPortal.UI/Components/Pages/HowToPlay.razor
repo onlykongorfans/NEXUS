@@ -1,0 +1,163 @@
+@page "/how-to-play"
+
+<PageTitle>How To Play - Project KONGOR</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="px-4 px-sm-6 pt-8">
+
+    <MudStack AlignItems="AlignItems.Center" Spacing="3" Class="mb-6 animate-fade-in">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.SportsEsports" Size="Size.Large" Color="Color.Primary" />
+            <MudText Typo="Typo.h4" Class="section-header">How To Play</MudText>
+        </MudStack>
+        <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary" Style="max-width: 720px;">
+            Follow these seven steps to register your account, install the game client, set up WILLOWMAKER, and launch Heroes Of Newerth on Windows.
+        </MudText>
+    </MudStack>
+
+    <MudStack Spacing="4" Class="mb-6">
+        <MudCard Class="glass-card pa-4 animate-fade-in-delay-1" Elevation="0">
+            <MudCardContent>
+                <MudStack Spacing="2">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <span class="how-to-play-step-number">1</span>
+                        <MudText Typo="Typo.h5">Register Your Account</MudText>
+                    </MudStack>
+                    <MudText Typo="Typo.body1">
+                        Register your account <MudLink Href="https://portal.kongor.fans/email/register" Color="Color.Primary">here</MudLink>.
+                    </MudText>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+
+        <MudCard Class="glass-card pa-4 animate-fade-in-delay-1" Elevation="0">
+            <MudCardContent>
+                <MudStack Spacing="3">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <span class="how-to-play-step-number">2</span>
+                        <MudText Typo="Typo.h5">Download The Game Client If Needed</MudText>
+                    </MudStack>
+                    <MudText Typo="Typo.body1">
+                        Download the game client files for Windows if you do not have an existing old HoN or Project KONGOR folder.
+                        If you already have one, you can skip this step.
+                    </MudText>
+
+                    <MudCard Class="glass-card-inner pa-3" Elevation="0">
+                        <MudCardContent>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@Icons.Material.Filled.SportsEsports" Size="Size.Medium" Color="Color.Primary" />
+                                <MudText Typo="Typo.h6">Game Client Distribution</MudText>
+                            </MudStack>
+                        </MudCardContent>
+                        <MudCardActions>
+                            <MudButton Href="https://drive.proton.me/urls/TGJHBP4QV0#EZhpvXMk2YFB" Target="_blank" Variant="Variant.Filled" Color="Color.Primary" Class="glow-button" StartIcon="@Icons.Custom.Brands.MicrosoftWindows">
+                                Download For Windows
+                            </MudButton>
+                        </MudCardActions>
+                    </MudCard>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+
+        <MudCard Class="glass-card pa-4 animate-fade-in-delay-1" Elevation="0">
+            <MudGrid Spacing="4" Class="align-center">
+                <MudItem xs="12" md="7">
+                    <img src="images/how-to-play/willowmaker_releases.png" alt="WILLOWMAKER GitHub release assets showing the Windows downloads" loading="lazy" class="how-to-play-image" />
+                </MudItem>
+                <MudItem xs="12" md="5">
+                    <MudStack Spacing="2">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <span class="how-to-play-step-number">3</span>
+                            <MudText Typo="Typo.h5">Download WILLOWMAKER</MudText>
+                        </MudStack>
+                        <MudText Typo="Typo.body1">
+                            Click the ZIP file that matches the operating system you are running.
+                            For example, <strong>windows-x64-v2.1.6.zip</strong> is for 64-bit Windows computers.
+                        </MudText>
+                        <MudButton Href="https://github.com/onlykongorfans/WILLOWMAKER/releases" Target="_blank" Variant="Variant.Filled" Color="Color.Primary" Class="glow-button align-self-start" StartIcon="@Icons.Material.Filled.Download">
+                            Download WILLOWMAKER (Game Client Launcher)
+                        </MudButton>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        </MudCard>
+
+        <MudCard Class="glass-card pa-4 animate-fade-in-delay-2" Elevation="0">
+            <MudGrid Spacing="4" Class="align-center">
+                <MudItem xs="12" md="7">
+                    <img src="images/how-to-play/willowmaker_files_extract_then_copy.png" alt="Extracted WILLOWMAKER application and library files selected in Windows File Explorer" loading="lazy" class="how-to-play-image" />
+                </MudItem>
+                <MudItem xs="12" md="5">
+                    <MudStack Spacing="2">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <span class="how-to-play-step-number">4</span>
+                            <MudText Typo="Typo.h5">Extract The Launcher</MudText>
+                        </MudStack>
+                        <MudText Typo="Typo.body1">
+                            Open the downloaded ZIP file and select <strong>Extract All</strong>.
+                            Open the extracted folder, then copy the WILLOWMAKER application and all three accompanying DLL files.
+                        </MudText>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        </MudCard>
+
+        <MudCard Class="glass-card pa-4 animate-fade-in-delay-2" Elevation="0">
+            <MudGrid Spacing="4" Class="align-center">
+                <MudItem xs="12" md="7">
+                    <img src="images/how-to-play/willowmaker_paste_files.png" alt="WILLOWMAKER files being pasted into the HoN installation folder in Windows File Explorer" loading="lazy" class="how-to-play-image" />
+                </MudItem>
+                <MudItem xs="12" md="5">
+                    <MudStack Spacing="2">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <span class="how-to-play-step-number">5</span>
+                            <MudText Typo="Typo.h5">Copy The Files (All 4) Into Your Existing Or New Heroes Of Newerth Folder</MudText>
+                        </MudStack>
+                        <MudText Typo="Typo.body1">
+                            Copy and paste the files into the root of your existing HoN or Project KONGOR installation directory.
+                        </MudText>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        </MudCard>
+
+        <MudCard Class="glass-card pa-4 animate-fade-in-delay-3" Elevation="0">
+            <MudGrid Spacing="4" Class="align-center">
+                <MudItem xs="12" md="7">
+                    <img src="images/how-to-play/willowmaker_create_shortcut.png" alt="Create shortcut option for WILLOWMAKER in Windows File Explorer" loading="lazy" class="how-to-play-image" />
+                </MudItem>
+                <MudItem xs="12" md="5">
+                    <MudStack Spacing="2">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <span class="how-to-play-step-number">6</span>
+                            <MudText Typo="Typo.h5">Create And Run The Shortcut</MudText>
+                        </MudStack>
+                        <MudText Typo="Typo.body1">
+                            Right-click the WILLOWMAKER application and select <strong>Create shortcut</strong>, then move the shortcut to your desktop.
+                            Right-click the desktop shortcut, select <strong>Run as administrator</strong>, and approve the Windows permission prompt.
+                        </MudText>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        </MudCard>
+
+        <MudCard Class="glass-card pa-4 animate-fade-in-delay-4" Elevation="0">
+            <MudGrid Spacing="4" Class="align-center">
+                <MudItem xs="12" md="7">
+                    <img src="images/how-to-play/willowmaker_press_play.png" alt="WILLOWMAKER launcher with the Play Heroes Of Newerth button highlighted" loading="lazy" class="how-to-play-image" />
+                </MudItem>
+                <MudItem xs="12" md="5">
+                    <MudStack Spacing="2">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <span class="how-to-play-step-number">7</span>
+                            <MudText Typo="Typo.h5">Launch The Game</MudText>
+                        </MudStack>
+                        <MudText Typo="Typo.body1">
+                            Press the <strong>Play Heroes Of Newerth</strong> button. Enjoy!
+                        </MudText>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        </MudCard>
+    </MudStack>
+
+</MudContainer>
