@@ -94,6 +94,7 @@ public partial class ClientRequesterController(MerrickContext databaseContext, I
             "auth"                          => await HandleAuthentication(),
             "pre_auth"                      => await HandlePreAuthentication(),
             "srpAuth"                       => await HandleSRPAuthentication(),
+            "switch_auth"                   => await HandleSwitchAuthentication(),
 
             // statistics
             "get_account_all_hero_stats"    => await GetHeroStatistics(),
