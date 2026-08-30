@@ -80,11 +80,12 @@ public partial class ClientRequesterController(MerrickContext databaseContext, I
     }
 
     /// <summary>
-    ///     Masks the value of a request parameter if it carries credential material: the session cookie, or the SRP exchange parameters "A" and "proof".
+    ///     Masks the value of a request parameter if it carries credential material: the session cookie, a password or password digest,
+    ///     or the SRP exchange parameters "A" and "proof".
     ///     Empty values are preserved, so that a missing credential remains distinguishable from a masked one.
     /// </summary>
     private static string MaskCredentialBearingParameterValue(string parameterName, string parameterValue)
-        => parameterName is ("cookie" or "A" or "proof") && parameterValue.Length > 0 ? "REDACTED" : parameterValue;
+        => parameterName is ("cookie" or "password" or "A" or "proof") && parameterValue.Length > 0 ? "REDACTED" : parameterValue;
 
     private async Task<IActionResult> HandleClientRequest()
     {
@@ -108,6 +109,7 @@ public partial class ClientRequesterController(MerrickContext databaseContext, I
             "get_upgrades"                  => await GetUpgrades(),
             "get_initStats"                 => await GetInitialStatistics(),
             "show_simple_stats"             => await GetSimpleStatistics(),
+            "reset_stats"                   => await ResetStatistics(),
 
             // upgrades
             "selected_upgrades"             => await SetSelectedUpgrades(),
