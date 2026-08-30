@@ -42,7 +42,7 @@ public class SubAccountController(MerrickContext databaseContext, IDatabase dist
             return ClientFailure(InternalError);
         }
 
-        RedisKey creationLockKey = "SUB-ACCOUNT-CREATION-LOCK";
+        RedisKey creationLockKey = AccountNameAllocation.LockKey;
         RedisValue creationLockToken = Guid.CreateVersion7().ToString();
         TimeSpan creationLockExpiration = TimeSpan.FromSeconds(30);
 

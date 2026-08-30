@@ -377,9 +377,12 @@ public partial class ClientRequesterController
         throw new ArgumentOutOfRangeException(nameof(table), table, $@"Unsupported Value For Form Parameter ""table"": ""{table}""");
     }
 
-    private async Task<IActionResult> GetHeroStatistics()
+    private async Task<IActionResult> GetHeroStatistics(string? sessionAccountName)
     {
         string? accountName = Request.Form["nickname"];
+
+        // The Legacy Client Omits "nickname" When Requesting Its Own Mastery Hero Information And Expects The Account To Be Inferred From The Validated Session Cookie
+        accountName ??= sessionAccountName;
 
         if (accountName is null)
             return BadRequest(@"Missing Value For Form Parameter ""nickname""");

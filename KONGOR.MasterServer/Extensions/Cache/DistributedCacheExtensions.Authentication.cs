@@ -40,8 +40,26 @@ public static partial class DistributedCacheExtensions
     // Additionally, Cached Values Cannot Be Retrieved Without Their Respective Key, So Iterating Just The Values Is Not Possible Without Complex Reflection
     private static string ConstructAccountSessionCookieKey(string cookie) => $@"ACCOUNT-SESSION-COOKIE:[""{cookie}""]";
 
+    private static string ConstructAccountSessionCookieIndexKey(string accountName) => $@"ACCOUNT-SESSION-COOKIES:[""{accountName}""]";
+
     public static async Task SetAccountNameForSessionCookie(this IDatabase distributedCacheStore, string cookie, string accountName)
-        => await distributedCacheStore.StringSetAsync(ConstructAccountSessionCookieKey(cookie), accountName, TimeSpan.FromHours(24));
+    {
+        RedisKey cookieKey = ConstructAccountSessionCookieKey(cookie);
+        RedisKey accountCookieIndexKey = ConstructAccountSessionCookieIndexKey(accountName);
+        RedisValue previousAccountName = await distributedCacheStore.StringGetAsync(cookieKey);
+        TimeSpan sessionLifetime = TimeSpan.FromHours(24);
+
+        ITransaction transaction = distributedCacheStore.CreateTransaction();
+
+        _ = transaction.StringSetAsync(cookieKey, accountName, sessionLifetime);
+        _ = transaction.SetAddAsync(accountCookieIndexKey, cookie);
+        _ = transaction.KeyExpireAsync(accountCookieIndexKey, sessionLifetime);
+
+        if (previousAccountName.IsNullOrEmpty is false && previousAccountName.Equals(accountName).Equals(false))
+            _ = transaction.SetRemoveAsync(ConstructAccountSessionCookieIndexKey(previousAccountName.ToString()), cookie);
+
+        await transaction.ExecuteAsync();
+    }
 
     public static async Task<string?> GetAccountNameForSessionCookie(this IDatabase distributedCacheStore, string cookie)
     {
@@ -51,7 +69,51 @@ public static partial class DistributedCacheExtensions
     }
 
     public static async Task RemoveAccountNameForSessionCookie(this IDatabase distributedCacheStore, string cookie)
-        => await distributedCacheStore.KeyDeleteAsync(ConstructAccountSessionCookieKey(cookie));
+    {
+        RedisKey cookieKey = ConstructAccountSessionCookieKey(cookie);
+        RedisValue accountName = await distributedCacheStore.StringGetAsync(cookieKey);
+
+        ITransaction transaction = distributedCacheStore.CreateTransaction();
+        _ = transaction.KeyDeleteAsync(cookieKey);
+
+        if (accountName.IsNullOrEmpty is false)
+            _ = transaction.SetRemoveAsync(ConstructAccountSessionCookieIndexKey(accountName.ToString()), cookie);
+
+        await transaction.ExecuteAsync();
+    }
+
+    /// <summary>
+    ///     Remaps every still-valid session cookie for a renamed account while preserving each cookie's remaining lifetime.
+    /// </summary>
+    public static async Task RenameAccountSessionCookies(this IDatabase distributedCacheStore, string previousAccountName, string newAccountName)
+    {
+        const string renameScript = """
+            if redis.call('GET', KEYS[1]) == ARGV[1] then
+                redis.call('SET', KEYS[1], ARGV[2], 'KEEPTTL')
+                return 1
+            end
+
+            return 0
+            """;
+
+        RedisKey previousIndexKey = ConstructAccountSessionCookieIndexKey(previousAccountName);
+        RedisKey newIndexKey = ConstructAccountSessionCookieIndexKey(newAccountName);
+        RedisValue[] cookies = await distributedCacheStore.SetMembersAsync(previousIndexKey);
+
+        foreach (RedisValue cookie in cookies)
+        {
+            RedisKey cookieKey = ConstructAccountSessionCookieKey(cookie.ToString());
+            RedisResult result = await distributedCacheStore.ScriptEvaluateAsync(renameScript, [cookieKey], [previousAccountName, newAccountName]);
+
+            if ((long) result == 1)
+                await distributedCacheStore.SetAddAsync(newIndexKey, cookie);
+        }
+
+        if (cookies.Length > 0)
+            await distributedCacheStore.KeyExpireAsync(newIndexKey, TimeSpan.FromHours(24));
+
+        await distributedCacheStore.KeyDeleteAsync(previousIndexKey);
+    }
 
     public static async Task<(bool IsValid, string? AccountName)> ValidateAccountSessionCookie(this IDatabase distributedCacheStore, string cookie)
     {
@@ -71,6 +133,11 @@ public static partial class DistributedCacheExtensions
         IDatabase distributedCacheStore = distributedCacheProvider.GetDatabase();
 
         await foreach (RedisKey key in server.KeysAsync(pattern: "ACCOUNT-SESSION-COOKIE:*"))
+        {
+            await distributedCacheStore.KeyDeleteAsync(key);
+        }
+
+        await foreach (RedisKey key in server.KeysAsync(pattern: "ACCOUNT-SESSION-COOKIES:*"))
         {
             await distributedCacheStore.KeyDeleteAsync(key);
         }

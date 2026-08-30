@@ -30,7 +30,7 @@ public partial class ClientRequesterController(MerrickContext databaseContext, I
     public async Task<IActionResult> ClientRequester()
     {
         bool endpointRequiresCookieValidation = Request.Query["f"].SingleOrDefault() is not "auth" and not "pre_auth" and not "srpAuth";
-        bool accountSessionCookieIsValid = (await DistributedCache.ValidateAccountSessionCookie(Request.Form["cookie"].ToString() ?? "NULL")).IsValid;
+        (bool accountSessionCookieIsValid, string? sessionAccountName) = await DistributedCache.ValidateAccountSessionCookie(Request.Form["cookie"].ToString() ?? "NULL");
 
         if (endpointRequiresCookieValidation.Equals(true) && accountSessionCookieIsValid.Equals(false))
         {
@@ -47,7 +47,7 @@ public partial class ClientRequesterController(MerrickContext databaseContext, I
         if (endpointRequiresCookieValidation.Equals(false) && accountSessionCookieIsValid.Equals(true))
             Logger.LogError("[BUG] Endpoint Does Not Require Cookie Validation But A Valid Cookie Was Found");
 
-        IActionResult result = await HandleClientRequest();
+        IActionResult result = await HandleClientRequest(sessionAccountName);
 
         // Failed Requests Are Otherwise Only Visible In The Logs As Anonymous Non-Success Status Codes, So The Requested Function, The Response Body, And The Request Context Are Logged Here To Make Failures Attributable And Diagnosable
         if (result is IStatusCodeActionResult { StatusCode: >= StatusCodes.Status400BadRequest } failedResult)
@@ -87,7 +87,7 @@ public partial class ClientRequesterController(MerrickContext databaseContext, I
     private static string MaskCredentialBearingParameterValue(string parameterName, string parameterValue)
         => parameterName is ("cookie" or "password" or "A" or "proof") && parameterValue.Length > 0 ? "REDACTED" : parameterValue;
 
-    private async Task<IActionResult> HandleClientRequest()
+    private async Task<IActionResult> HandleClientRequest(string? sessionAccountName)
     {
         return Request.Query["f"].SingleOrDefault() switch
         {
@@ -98,7 +98,7 @@ public partial class ClientRequesterController(MerrickContext databaseContext, I
             "switch_auth"                   => await HandleSwitchAuthentication(),
 
             // statistics
-            "get_account_all_hero_stats"    => await GetHeroStatistics(),
+            "get_account_all_hero_stats"    => await GetHeroStatistics(sessionAccountName),
             "get_match_stats"               => await GetMatchStatistics(),
             "take_mastery_reward"           => await TakeMasteryReward(),
             "boost_match_mastery"           => await BoostMatchMastery(),
