@@ -73,12 +73,25 @@ public class NicknameChangeController(MerrickContext databaseContext, IDatabase 
             return ClientFailure(AccountInformationError);
         }
 
+        int? errorCode = await UserInventoryTransaction.ExecuteForAccount(MerrickContext, account.ID,
+            lockedAccount => ChangeNickname(lockedAccount, requestedAccountID), HttpContext.RequestAborted);
+
+        if (errorCode is not null)
+            return ClientFailure(errorCode.Value);
+
+        await SynchroniseRenamedAccountCache(cookie, authenticatedAccountName, Request.Form["nickname"].ToString());
+
+        return ClientSuccess();
+    }
+
+    private async Task<int?> ChangeNickname(Account account, int requestedAccountID)
+    {
         if (account.ID != requestedAccountID)
         {
             Logger.LogWarning("Nickname Change Account ID Mismatch For {AccountName} (Expected {AccountID}, Received {RequestedAccountID})",
                 account.Name, account.ID, requestedAccountID);
 
-            return ClientFailure(AccountInformationError);
+            return AccountInformationError;
         }
 
         string nickname = Request.Form["nickname"].ToString();
@@ -88,28 +101,28 @@ public class NicknameChangeController(MerrickContext databaseContext, IDatabase 
             || nickname.Length is < MinimumAccountNameLength or > MaximumAccountNameLength
             || nickname.All(character => char.IsAsciiLetterOrDigit(character) || character is '_' or '-').Equals(false))
         {
-            return ClientFailure(InvalidNicknameError);
+            return InvalidNicknameError;
         }
 
         if (nickname.Equals(confirmedNickname, StringComparison.Ordinal).Equals(false))
-            return ClientFailure(NicknameConfirmationError);
+            return NicknameConfirmationError;
 
         if (char.IsAsciiDigit(nickname[0])
             || nickname.StartsWith("S2", StringComparison.OrdinalIgnoreCase)
             || nickname.StartsWith("FB", StringComparison.OrdinalIgnoreCase)
             || nickname.StartsWith("Frostburn", StringComparison.OrdinalIgnoreCase))
         {
-            return ClientFailure(ForbiddenNicknamePrefixError);
+            return ForbiddenNicknamePrefixError;
         }
 
         if (await MerrickContext.Accounts.AnyAsync(candidate => candidate.Name.Equals(nickname)))
-            return ClientFailure(NicknameAlreadyExistsError);
+            return NicknameAlreadyExistsError;
 
         string submittedPasswordHash = Request.Form["password"].ToString();
         string computedPasswordHash = SRPAuthenticationHandlers.ComputeSRPPasswordHash(submittedPasswordHash, account.User.SRPPasswordSalt, passwordIsHashed: true);
 
         if (CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(computedPasswordHash), Encoding.UTF8.GetBytes(account.User.SRPPasswordHash)).Equals(false))
-            return ClientFailure(InvalidPasswordError);
+            return InvalidPasswordError;
 
         StoreItem? nicknameChangeProduct = JSONConfiguration.StoreItemsConfiguration.GetByID(NicknameChangeProductID);
 
@@ -117,11 +130,11 @@ public class NicknameChangeController(MerrickContext databaseContext, IDatabase 
         {
             Logger.LogError("[BUG] Nickname Change Store Product With ID {ProductID} Was Not Found In Store Configuration", NicknameChangeProductID);
 
-            return ClientFailure(InternalError);
+            return InternalError;
         }
 
         if (account.User.OwnedStoreItems.Contains(nicknameChangeProduct.PrefixedCode).Equals(false))
-            return ClientFailure(MissingNicknameChangeProductError);
+            return MissingNicknameChangeProductError;
 
         string previousAccountName = account.Name;
 
@@ -157,15 +170,13 @@ public class NicknameChangeController(MerrickContext databaseContext, IDatabase 
             Logger.LogError(exception, "Unable To Commit Nickname Change For Account {AccountName} (ID: {AccountID}) To {Nickname}",
                 previousAccountName, account.ID, nickname);
 
-            return ClientFailure(StoreTransactionError);
+            return StoreTransactionError;
         }
-
-        await SynchroniseRenamedAccountCache(cookie, previousAccountName, nickname);
 
         Logger.LogInformation("Account {PreviousAccountName} (ID: {AccountID}) Consumed Store Product {ProductID} And Changed Nickname To {Nickname}",
             previousAccountName, account.ID, NicknameChangeProductID, nickname);
 
-        return ClientSuccess();
+        return null;
     }
 
     private async Task SynchroniseRenamedAccountCache(string cookie, string previousAccountName, string newAccountName)

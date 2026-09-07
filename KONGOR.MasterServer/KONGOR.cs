@@ -121,6 +121,7 @@ public class KONGOR
 
         // Add MVC Controllers Support
         builder.Services.AddControllers();
+        builder.Services.Configure<CustomAccountIconConfiguration>(builder.Configuration.GetSection(CustomAccountIconConfiguration.SectionName));
 
         // Add Comprehensive Error Response Detail In Development Environment
         if (builder.Environment.IsDevelopment())
@@ -264,6 +265,7 @@ public class KONGOR
 
         // Map MVC Controllers With Rate Limiting
         application.MapControllers().RequireRateLimiting(RateLimiterPolicies.Relaxed);
+        application.MapCustomAccountIconImages();
 
         // Run The Application
         application.Run();

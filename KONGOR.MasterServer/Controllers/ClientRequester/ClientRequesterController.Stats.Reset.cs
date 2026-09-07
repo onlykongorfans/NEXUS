@@ -57,6 +57,12 @@ public partial class ClientRequesterController
             return StatResetFailure("internal error");
         }
 
+        return await UserInventoryTransaction.ExecuteForAccount(MerrickContext, account.ID,
+            lockedAccount => ResetStatistics(lockedAccount, requestedAccountID, selection), HttpContext.RequestAborted);
+    }
+
+    private async Task<IActionResult> ResetStatistics(Account account, int requestedAccountID, StatResetSelection selection)
+    {
         if (account.ID != requestedAccountID)
         {
             Logger.LogWarning("Stat Reset Account ID Mismatch For {AccountName} (Expected {AccountID}, Received {RequestedAccountID})",

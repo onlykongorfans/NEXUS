@@ -76,6 +76,12 @@ public class SubAccountController(MerrickContext databaseContext, IDatabase dist
             return ClientFailure(InternalError);
         }
 
+        return await UserInventoryTransaction.ExecuteForAccount(MerrickContext, authenticatedAccount.ID,
+            lockedAccount => CreateSubAccount(lockedAccount, requestedAccountID), HttpContext.RequestAborted);
+    }
+
+    private async Task<IActionResult> CreateSubAccount(Account authenticatedAccount, int requestedAccountID)
+    {
         if (authenticatedAccount.ID != requestedAccountID)
         {
             Logger.LogWarning("Sub-Account Creation Account ID Mismatch For {AccountName} (Expected {AccountID}, Received {RequestedAccountID})",

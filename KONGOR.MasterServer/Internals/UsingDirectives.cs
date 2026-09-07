@@ -45,6 +45,7 @@ global using MERRICK.DatabaseContext.Entities.Statistics;
 global using MERRICK.DatabaseContext.Entities.Utility;
 global using MERRICK.DatabaseContext.Enumerations;
 global using MERRICK.DatabaseContext.Extensions;
+global using MERRICK.DatabaseContext.Handlers;
 global using MERRICK.DatabaseContext.Persistence;
 
 global using Microsoft.AspNetCore.HttpLogging;

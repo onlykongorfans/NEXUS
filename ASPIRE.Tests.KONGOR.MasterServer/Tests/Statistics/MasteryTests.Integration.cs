@@ -3,7 +3,7 @@ namespace ASPIRE.Tests.KONGOR.MasterServer.Tests.Statistics;
 /// <summary>
 ///     Integration tests for the mastery client-requester endpoints, covering the mastery block of the match stats response, the post-match boost flow, and the rules that a boost may only be applied to the account's most recent match and only once per match.
 /// </summary>
-public sealed class MasteryTests_Integration(KONGORIntegrationWebApplicationFactory webApplicationFactory)
+public sealed partial class MasteryTests_Integration(KONGORIntegrationWebApplicationFactory webApplicationFactory)
 {
     private const string ClientRequesterRoute = "client_requester.php";
 

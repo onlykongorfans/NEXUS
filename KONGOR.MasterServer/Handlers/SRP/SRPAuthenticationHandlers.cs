@@ -22,7 +22,7 @@ public static class SRPAuthenticationHandlers
             LeaverThreshold = ".05", // TODO: Set Per Partition Of Games Played (e.g. under 50 games = 20%, between 50 and 100 games = 10%, over 100 games = 5%)
             HasSubAccounts = parameters.Account.User.Accounts.Any(account => account.IsMain.Equals(false)),
             IsSubAccount = parameters.Account.IsMain.Equals(false),
-            ICBURL = Environment.GetEnvironmentVariable("APPLICATION_URL") ?? throw new NullReferenceException("Application URL Is NULL"),
+            ICBURL = parameters.CustomIconBaseURL ?? Environment.GetEnvironmentVariable("APPLICATION_URL") ?? throw new NullReferenceException("Application URL Is NULL"),
             AuthenticationHash = ComputeChatServerCookieHash(parameters.Account.ID, parameters.ClientIPAddress, cookie),
             ChatServerIPAddress = parameters.ChatServer.Address,
             ChatServerPort = parameters.ChatServer.Port.ToString(),
@@ -83,6 +83,7 @@ public static class SRPAuthenticationHandlers
 
     public class StageTwoResponseParameters()
     {
+        public string? CustomIconBaseURL { get; set; }
         public required Account Account { get; set; }
         public required Dictionary<AccountStatisticsType, AccountStatistics> Statistics { get; set; }
         public required List<Account> ClanRoster { get; set; }

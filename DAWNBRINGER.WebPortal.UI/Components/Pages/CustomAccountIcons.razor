@@ -1,0 +1,228 @@
+@page "/account/icons"
+@page "/icons"
+@attribute [Authorize]
+@inject PortalAuthenticationService AuthenticationService
+
+<PageTitle>Custom Account Icons - Project KONGOR</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="px-4 pt-8 pb-8">
+    <MudStack Spacing="3">
+        <MudButton Href="/account" StartIcon="@Icons.Material.Filled.ArrowBack" Style="align-self: start;">Account</MudButton>
+        <MudText Typo="Typo.h4">Custom Account Icons</MudText>
+        <MudText>Buy a custom icon slot in the game store, then upload your image here. Your main account and all linked subaccounts can equip any icon in this collection.</MudText>
+
+        @if (!string.IsNullOrEmpty(Error))
+        {
+            <MudAlert Severity="Severity.Error">@Error</MudAlert>
+        }
+        @if (!string.IsNullOrEmpty(Success))
+        {
+            <MudAlert Severity="Severity.Success">@Success</MudAlert>
+        }
+        @if (Collection is null)
+        {
+            @if (Busy)
+            {
+                <MudProgressLinear Indeterminate="true" />
+            }
+            else
+            {
+                <MudButton OnClick="Refresh" Disabled="Busy">Retry</MudButton>
+            }
+        }
+        else
+        {
+            <MudCard Class="glass-card pa-4">
+                <MudStack Spacing="3">
+                    <MudText Typo="Typo.h6">Upload a new icon</MudText>
+                    @if (!Collection.HasPendingSlot)
+                    {
+                        <MudText>You have no unused upload slot. Purchase Custom Account Icon in the game store, then refresh this page.</MudText>
+                        <MudButton OnClick="Refresh" Disabled="Busy" Variant="Variant.Outlined">Refresh slots</MudButton>
+                    }
+                    else
+                    {
+                        <MudText>You have one unused slot. Upload a static PNG up to 2 MB, between 128 and 2048 pixels on each side. Your square crop will be saved at 128 × 128.</MudText>
+                        <InputFile OnChange="ChooseImage" accept="image/png,.png" disabled="@Busy" aria-label="Choose a PNG image" />
+                        @if (OriginalImage is not null && Preview is not null)
+                        {
+                            <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: start;">
+                                <div>
+                                    <MudText Typo="Typo.subtitle2">Original (@Preview.Width × @Preview.Height)</MudText>
+                                    <img src="@OriginalImage" alt="Original upload" style="max-width: 280px; max-height: 280px;" />
+                                </div>
+                                <div>
+                                    <MudText Typo="Typo.subtitle2">Final icon (128 × 128)</MudText>
+                                    <img src="@($"data:image/png;base64,{Preview.Image}")" alt="Final cropped icon preview" width="128" height="128" style="background: #384047;" />
+                                </div>
+                            </div>
+                            <MudText Typo="Typo.body2">Adjust the square crop in pixels, then update the preview.</MudText>
+                            <MudGrid>
+                                <MudItem xs="4"><MudNumericField T="int" @bind-Value="CropX" Label="Left" Min="0" Max="@(Preview.Width - CropSize)" Disabled="Busy" /></MudItem>
+                                <MudItem xs="4"><MudNumericField T="int" @bind-Value="CropY" Label="Top" Min="0" Max="@(Preview.Height - CropSize)" Disabled="Busy" /></MudItem>
+                                <MudItem xs="4"><MudNumericField T="int" @bind-Value="CropSize" Label="Square size" Min="128" Max="@Math.Min(Preview.Width, Preview.Height)" Disabled="Busy" /></MudItem>
+                            </MudGrid>
+                            <MudButton OnClick="UpdatePreview" Disabled="Busy" Variant="Variant.Outlined">Update preview</MudButton>
+                            @if (!PreviewMatchesCrop)
+                            {
+                                <MudText Color="Color.Warning">Update the preview to confirm your crop.</MudText>
+                            }
+                            <MudCheckBox T="bool" @bind-Value="Confirmed" Disabled="@(Busy || !PreviewMatchesCrop)" Label="I understand this uses one purchased slot. The uploaded icon cannot be replaced; adding another image requires another purchase." />
+                            <MudButton OnClick="Upload" Disabled="@(Busy || !Confirmed || !PreviewMatchesCrop)" Variant="Variant.Filled" Color="Color.Primary">Confirm and upload</MudButton>
+                        }
+                    }
+                    @if (Busy)
+                    {
+                        <MudProgressLinear Indeterminate="true" />
+                    }
+                </MudStack>
+            </MudCard>
+
+            <MudText Typo="Typo.h6">Your collection</MudText>
+            <MudText>Equip these in the game's vault. Each account can choose a different icon. After uploading, sign out and back into the game to refresh your owned icons.</MudText>
+            @if (Collection.Icons.Count == 0)
+            {
+                <MudText>No custom icons uploaded yet.</MudText>
+            }
+            <MudGrid>
+                @foreach (CustomAccountIconSummary icon in Collection.Icons)
+                {
+                    <MudItem xs="6" sm="4" md="3">
+                        <MudCard Class="glass-card pa-3">
+                            @if (icon.Available)
+                            {
+                                <img src="@icon.ImageURL" alt="Custom icon slot @icon.SlotID" width="128" height="128" style="max-width: 100%; height: auto;" loading="lazy" />
+                            }
+                            else
+                            {
+                                <MudText>Image unavailable</MudText>
+                            }
+                            <MudText>Slot @icon.SlotID</MudText>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    private CustomAccountIconCollection? Collection { get; set; }
+    private CustomAccountIconPreview? Preview { get; set; }
+    private byte[]? ImageBytes { get; set; }
+    private string? OriginalImage { get; set; }
+    private string? Error { get; set; }
+    private string? Success { get; set; }
+    private int CropX { get; set; }
+    private int CropY { get; set; }
+    private int CropSize { get; set; }
+    private bool Confirmed { get; set; }
+    private bool Busy { get; set; }
+    private bool PreviewMatchesCrop => Preview is not null && Preview.CropX == CropX && Preview.CropY == CropY && Preview.CropSize == CropSize;
+
+    protected override Task OnInitializedAsync() => Refresh();
+
+    private async Task Refresh()
+    {
+        Busy = true;
+        Error = null;
+        try
+        {
+            using HttpClient client = AuthenticationService.CreateAuthenticatedClient();
+            using HttpResponseMessage response = await client.GetAsync("CustomAccountIcons");
+            if (!response.IsSuccessStatusCode) { Error = await ReadError(response); return; }
+            Collection = await response.Content.ReadFromJsonAsync<CustomAccountIconCollection>();
+        }
+        catch (HttpRequestException) { Error = "Unable to load your icons. Please try again."; }
+        finally { Busy = false; }
+    }
+
+    private async Task ChooseImage(InputFileChangeEventArgs arguments)
+    {
+        Preview = null;
+        ImageBytes = null;
+        OriginalImage = null;
+        Error = null;
+        Success = null;
+        Confirmed = false;
+        CropX = CropY = CropSize = 0;
+        Busy = true;
+        try
+        {
+            IBrowserFile file = arguments.File;
+            if (file.Size > 2 * 1024 * 1024) { Error = "Choose a PNG file no larger than 2 MB."; return; }
+            await using Stream input = file.OpenReadStream(2 * 1024 * 1024);
+            using MemoryStream output = new ();
+            await input.CopyToAsync(output);
+            ImageBytes = output.ToArray();
+            await FetchPreview();
+            if (Preview is not null) OriginalImage = "data:image/png;base64," + Convert.ToBase64String(ImageBytes);
+        }
+        catch (IOException) { Error = "Unable to read that file. Please select it again."; }
+        catch (HttpRequestException) { Error = "Unable to preview your image. Please try again."; }
+        finally { Busy = false; }
+    }
+
+    private async Task UpdatePreview()
+    {
+        Busy = true;
+        Error = null;
+        Confirmed = false;
+        try { await FetchPreview(); }
+        catch (HttpRequestException) { Error = "Unable to preview your image. Please try again."; }
+        finally { Busy = false; }
+    }
+
+    private async Task FetchPreview()
+    {
+        using HttpClient client = AuthenticationService.CreateAuthenticatedClient();
+        using MultipartFormDataContent form = CreateForm();
+        using HttpResponseMessage response = await client.PostAsync("CustomAccountIcons/Preview", form);
+        if (!response.IsSuccessStatusCode) { Error = await ReadError(response); return; }
+        Preview = await response.Content.ReadFromJsonAsync<CustomAccountIconPreview>();
+        if (Preview is not null) { CropX = Preview.CropX; CropY = Preview.CropY; CropSize = Preview.CropSize; }
+    }
+
+    private MultipartFormDataContent CreateForm()
+    {
+        MultipartFormDataContent form = new ();
+        form.Add(new ByteArrayContent(ImageBytes ?? []), "Image", "icon.png");
+        form.Add(new StringContent(CropX.ToString(System.Globalization.CultureInfo.InvariantCulture)), "CropX");
+        form.Add(new StringContent(CropY.ToString(System.Globalization.CultureInfo.InvariantCulture)), "CropY");
+        form.Add(new StringContent(CropSize.ToString(System.Globalization.CultureInfo.InvariantCulture)), "CropSize");
+        form.Add(new StringContent((Collection?.NextSlotID ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture)), "ExpectedSlotID");
+        form.Add(new StringContent(Confirmed ? "true" : "false"), "Confirmed");
+        return form;
+    }
+
+    private async Task Upload()
+    {
+        if (!Confirmed || !PreviewMatchesCrop || Busy) return;
+        Busy = true;
+        Error = null;
+        try
+        {
+            using HttpClient client = AuthenticationService.CreateAuthenticatedClient();
+            using MultipartFormDataContent form = CreateForm();
+            using HttpResponseMessage response = await client.PostAsync("CustomAccountIcons", form);
+            if (!response.IsSuccessStatusCode) { Error = await ReadError(response); return; }
+            Success = "Your custom icon has been saved. Sign out and back into the game, then select it from the vault.";
+            Preview = null;
+            ImageBytes = null;
+            OriginalImage = null;
+            Confirmed = false;
+            await Refresh();
+        }
+        catch (HttpRequestException) { Error = "The upload result could not be confirmed. Refresh your collection before retrying."; }
+        finally { Busy = false; }
+    }
+
+    private static async Task<string> ReadError(HttpResponseMessage response)
+    {
+        if (response.StatusCode == HttpStatusCode.Unauthorized) return "Your session has expired. Please sign in again.";
+        if ((int) response.StatusCode == 413) return "Choose a PNG file no larger than 2 MB.";
+        if ((int) response.StatusCode == 429) return "Too many requests. Please wait a minute before trying again.";
+        string body = await response.Content.ReadAsStringAsync();
+        return response.Content.Headers.ContentType?.MediaType == "text/plain" ? body : "The request failed. Please refresh and try again.";
+    }
+}

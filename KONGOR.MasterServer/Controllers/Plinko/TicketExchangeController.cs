@@ -92,6 +92,12 @@ public class TicketExchangeController(MerrickContext databaseContext, IDatabase 
             return PurchaseFailureResponse(StatusInvalidItem);
         }
 
+        return await UserInventoryTransaction.ExecuteForAccount(MerrickContext, account.ID,
+            lockedAccount => Purchase(lockedAccount, entry, storeItem), HttpContext.RequestAborted);
+    }
+
+    private async Task<IActionResult> Purchase(Account account, TicketExchangeEntry entry, StoreItem storeItem)
+    {
         User user = account.User;
 
         if (user.PlinkoTickets < entry.TicketCost)

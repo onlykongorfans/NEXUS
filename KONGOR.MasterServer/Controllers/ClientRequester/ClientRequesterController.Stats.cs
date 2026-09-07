@@ -778,7 +778,9 @@ public partial class ClientRequesterController
             int heroBonusExperience = mastery.CalculateBonusExperience(masteryStatisticsType, Heroes.TotalHeroCount);
             int heroCurrentExperience = mastery.GetHeroExperienceByHeroIdentifier(requestingPlayerStatistics.HeroIdentifier);
 
-            MasteryBoostContext? masteryBoostContext = await DistributedCache.GetMasteryBoostContext(account.ID, matchStatistics.MatchID);
+            MasteryBoostContext? masteryBoostContext = requestingPlayerStatistics.MasteryBoostExperience is int boostExperience
+                ? new MasteryBoostContext(boostExperience, requestingPlayerStatistics.MasteryBoostIsSuperBoost)
+                : await DistributedCache.GetMasteryBoostContext(account.ID, matchStatistics.MatchID);
 
             // The Match, Bonus, And Boost Experience Are Accrued Into The Persisted Total During Statistics Submission And Boost Application
             // The Client Treats "mastery_exp_original" As The Pre-Match Starting Value And Adds The Match, Bonus, And Boost Experience On Top Of It, So The Accrued Amounts Are Subtracted Back Out Here

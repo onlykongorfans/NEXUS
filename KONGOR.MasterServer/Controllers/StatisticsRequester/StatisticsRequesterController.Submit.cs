@@ -20,6 +20,19 @@ public partial class StatisticsRequesterController
             ? JsonSerializer.Serialize(matchInformation)
             : null;
 
+        List<int> userIDs = await GetParticipantUserIDs(form);
+        IActionResult response = await UserInventoryTransaction.ExecuteForUsers(MerrickContext, userIDs,
+            users => SaveStatsSubmission(form, matchServer, matchInformation, matchInformationSnapshot, users), HttpContext.RequestAborted);
+
+        if (response is OkObjectResult)
+            await DistributedCache.RemoveMatchInformation(form.MatchStats.MatchID);
+
+        return response;
+    }
+
+    private async Task<IActionResult> SaveStatsSubmission(StatsForSubmissionRequestForm form, MatchServer matchServer,
+        MatchInformation? matchInformation, string? matchInformationSnapshot, IReadOnlyList<User> users)
+    {
         MatchStatistics? existingMatchStatistics = await MerrickContext.MatchStatistics.SingleOrDefaultAsync(stats => stats.MatchID == form.MatchStats.MatchID);
 
         MatchStatistics matchStatistics;
@@ -55,7 +68,7 @@ public partial class StatisticsRequesterController
                     .Include(account => account.User)
                     .SingleOrDefaultAsync(account => account.Name.Equals(accountName));
 
-                if (account is null)
+                if (account is null || users.Any(user => user.ID == account.User.ID) is false)
                 {
                     Logger.LogError($@"[BUG] Unable To Retrieve Account For Account Name ""{accountName}""");
 
@@ -73,9 +86,6 @@ public partial class StatisticsRequesterController
         }
 
         await MerrickContext.SaveChangesAsync();
-
-        // Remove The Match Information From The Distributed Cache Now That The Database Snapshot Is The Single Source Of Truth
-        await DistributedCache.RemoveMatchInformation(form.MatchStats.MatchID);
 
         return Ok(PhpSerialization.Serialize(new StatisticsSubmissionResponse()));
     }
@@ -120,6 +130,13 @@ public partial class StatisticsRequesterController
         if (matchServer is null)
             Logger.LogInformation($@"Match Server ID {form.ServerID} Hosted By ""{hostAccount.Name}"" Is No Longer Online While Match Statistics For Match ID {form.MatchStats.MatchID} Are Being Resubmitted");
 
+        List<int> userIDs = await GetParticipantUserIDs(form);
+        return await UserInventoryTransaction.ExecuteForUsers(MerrickContext, userIDs,
+            users => SaveStatsResubmission(form, users), HttpContext.RequestAborted);
+    }
+
+    private async Task<IActionResult> SaveStatsResubmission(StatsForSubmissionRequestForm form, IReadOnlyList<User> users)
+    {
         MatchStatistics? existingMatchStatistics = await MerrickContext.MatchStatistics.SingleOrDefaultAsync(stats => stats.MatchID == form.MatchStats.MatchID);
 
         MatchStatistics matchStatistics;
@@ -153,7 +170,7 @@ public partial class StatisticsRequesterController
                     .Include(account => account.User)
                     .SingleOrDefaultAsync(account => account.Name.Equals(accountName));
 
-                if (account is null)
+                if (account is null || users.Any(user => user.ID == account.User.ID) is false)
                 {
                     Logger.LogError($@"[BUG] Unable To Retrieve Account For Account Name ""{accountName}""");
 
@@ -173,5 +190,14 @@ public partial class StatisticsRequesterController
         await MerrickContext.SaveChangesAsync();
 
         return Ok(PhpSerialization.Serialize(new StatisticsResubmissionResponse(form.MatchStats.MatchID)));
+    }
+
+    private Task<List<int>> GetParticipantUserIDs(StatsForSubmissionRequestForm form)
+    {
+        string[] accountNames = form.PlayerStats.Values
+            .Select(statistics => Account.SeparateClanTagFromAccountName(statistics.Values.Single().AccountName).AccountName).Distinct().ToArray();
+
+        return MerrickContext.Accounts.Where(account => accountNames.Contains(account.Name))
+            .Select(account => account.User.ID).Distinct().ToListAsync(HttpContext.RequestAborted);
     }
 }

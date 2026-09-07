@@ -81,6 +81,12 @@ public class MiniGameController(MerrickContext databaseContext, IDatabase distri
             }));
         }
 
+        return await UserInventoryTransaction.ExecuteForAccount(MerrickContext, account.ID,
+            lockedAccount => Drop(lockedAccount, currency), HttpContext.RequestAborted);
+    }
+
+    private async Task<IActionResult> Drop(Account account, string currency)
+    {
         User user = account.User;
 
         bool payingWithGold = currency.Equals("gold");

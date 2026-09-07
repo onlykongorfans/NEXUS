@@ -10,6 +10,13 @@ public class MatchParticipantStatistics
 
     public required int AccountID { get; set; }
 
+    /// <summary>
+    ///     The experience granted by an applied mastery boost; null means no durable boost record exists.
+    /// </summary>
+    public int? MasteryBoostExperience { get; set; }
+
+    public bool MasteryBoostIsSuperBoost { get; set; }
+
     [MaxLength(15)]
     public required string AccountName { get; set; }
 

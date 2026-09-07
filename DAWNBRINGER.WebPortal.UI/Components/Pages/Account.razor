@@ -26,14 +26,22 @@
             else
             {
                 @* Account Header *@
-                <MudCard Class="glass-card pa-6 mb-6 animate-fade-in" Elevation="0" Style="position: relative;">
-                    <MudButton Href="/account/tools" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Build"
-                               Style="position: absolute; top: 24px; right: 24px;">
-                        Tools
-                    </MudButton>
+                <MudCard Class="glass-card pa-6 mb-6 animate-fade-in" Elevation="0">
                     <MudStack Spacing="2">
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Current Account</MudText>
-                        <MudText Typo="Typo.h4" Class="account-name-glow" Color="Color.Primary">@DisplayName</MudText>
+                        <div class="d-flex flex-wrap justify-space-between align-start gap-4">
+                            <MudStack Spacing="2">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Current Account</MudText>
+                                <MudText Typo="Typo.h4" Class="account-name-glow" Color="Color.Primary">@DisplayName</MudText>
+                            </MudStack>
+                            <div class="d-flex flex-wrap gap-2">
+                                <MudButton Href="/account/icons" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Image">
+                                    Custom Account Icons
+                                </MudButton>
+                                <MudButton Href="/account/tools" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Build">
+                                    Tools
+                                </MudButton>
+                            </div>
+                        </div>
 
                         <MudGrid Spacing="3" Class="mt-4">
                             <MudItem xs="6" sm="3">

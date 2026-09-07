@@ -256,6 +256,7 @@ public partial class ClientRequesterController
 
         SRPAuthenticationHandlers.StageTwoResponseParameters parameters = new ()
         {
+            CustomIconBaseURL = HttpContext.RequestServices.GetRequiredService<IOptions<CustomAccountIconConfiguration>>().Value.PublicBaseURL.TrimEnd('/'),
             Account = account,
             Statistics = statisticsByType,
             ClanRoster = account.Clan?.Members ?? [],

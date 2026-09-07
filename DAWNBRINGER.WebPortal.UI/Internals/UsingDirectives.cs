@@ -1,6 +1,7 @@
 ﻿global using ASPIRE.Common.Constants;
 global using ASPIRE.Common.Extensions.Logging;
 global using ASPIRE.Common.Extensions.Services;
+global using ASPIRE.Common.Services;
 
 global using DAWNBRINGER.WebPortal.UI.Attributes;
 global using DAWNBRINGER.WebPortal.UI.Services;

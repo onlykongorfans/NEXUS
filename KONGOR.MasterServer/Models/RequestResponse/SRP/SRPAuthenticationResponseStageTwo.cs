@@ -158,7 +158,7 @@ public class SRPAuthenticationResponseStageTwo
     public required bool IsSubAccount { get; set; }
 
     /// <summary>
-    ///     Unknown.
+    ///     The public base URL used by the client to download custom account icons.
     /// </summary>
     [PHPProperty("icb_url")]
     public required string ICBURL { get; set; }

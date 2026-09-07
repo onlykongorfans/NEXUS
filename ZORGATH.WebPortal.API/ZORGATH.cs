@@ -160,6 +160,8 @@ public class ZORGATH
 
         // Enable MVC Controllers
         builder.Services.AddControllers();
+        builder.Services.Configure<CustomAccountIconConfiguration>(builder.Configuration.GetSection(CustomAccountIconConfiguration.SectionName));
+        builder.Services.AddSingleton<CustomAccountIconProcessor>();
 
         // Add Comprehensive Error Response Detail In Development Environment
         if (builder.Environment.IsDevelopment())
@@ -341,6 +343,7 @@ public class ZORGATH
 
         // Map MVC Controllers With Rate Limiting
         application.MapControllers().RequireRateLimiting(RateLimiterPolicies.Relaxed);
+        application.MapCustomAccountIconImages();
 
         // Run The Application
         application.Run();

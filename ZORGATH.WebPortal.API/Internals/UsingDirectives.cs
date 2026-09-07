@@ -37,6 +37,12 @@ global using Microsoft.OpenApi;
 
 global using MimeKit;
 
+global using SixLabors.ImageSharp;
+global using SixLabors.ImageSharp.Formats;
+global using SixLabors.ImageSharp.Formats.Png;
+global using SixLabors.ImageSharp.PixelFormats;
+global using SixLabors.ImageSharp.Processing;
+
 global using System.IdentityModel.Tokens.Jwt;
 global using System.Net;
 global using System.Net.Sockets;
@@ -54,5 +60,6 @@ global using ZORGATH.WebPortal.API.Extensions;
 global using ZORGATH.WebPortal.API.Helpers;
 global using ZORGATH.WebPortal.API.Models;
 global using ZORGATH.WebPortal.API.Models.Configuration;
+global using ZORGATH.WebPortal.API.Services;
 global using ZORGATH.WebPortal.API.Services.Email;
 global using ZORGATH.WebPortal.API.Validators;

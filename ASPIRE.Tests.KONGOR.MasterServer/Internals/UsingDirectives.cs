@@ -19,6 +19,7 @@ global using KONGOR.MasterServer.Configuration.Economy;
 global using KONGOR.MasterServer.Configuration.Plinko;
 global using KONGOR.MasterServer.Configuration.Store;
 global using KONGOR.MasterServer.Constants;
+global using KONGOR.MasterServer.Controllers.ClientRequester;
 global using KONGOR.MasterServer.Extensions.Cache;
 global using KONGOR.MasterServer.Handlers.SRP;
 global using KONGOR.MasterServer.Helpers.Stats;
@@ -43,12 +44,15 @@ global using Microsoft.AspNetCore.Builder;
 global using Microsoft.AspNetCore.Hosting;
 global using Microsoft.AspNetCore.Http;
 global using Microsoft.AspNetCore.Identity;
+global using Microsoft.AspNetCore.Mvc;
 global using Microsoft.AspNetCore.Mvc.Testing;
 global using Microsoft.EntityFrameworkCore;
+global using Microsoft.EntityFrameworkCore.Diagnostics;
 global using Microsoft.Extensions.DependencyInjection;
 global using Microsoft.Extensions.Logging;
 global using Microsoft.Extensions.Logging.Abstractions;
 global using Microsoft.Extensions.Options;
+global using Microsoft.Extensions.Primitives;
 
 global using OneOf;
 
@@ -59,9 +63,11 @@ global using SecureRemotePassword;
 global using StackExchange.Redis;
 
 global using System.Collections;
+global using System.Data.Common;
 global using System.IdentityModel.Tokens.Jwt;
 global using System.Net;
 global using System.Net.Http.Json;
+global using System.Reflection;
 global using System.Security.Cryptography;
 global using System.Text;
 global using System.Text.Json;

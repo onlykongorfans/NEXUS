@@ -56,7 +56,26 @@ public class StoreController(MerrickContext databaseContext, IDatabase distribut
             return Ok(PhpSerialization.Serialize(CreateErrorResponse((int) StoreErrorCode.STORE_ACCOUNT_INFORMATION_ERROR)));
         }
 
-        switch (requestCode)
+        if (requestCode is StoreRequestCode.ATTEMPT_PURCHASE_PRODUCT_REQUEST or StoreRequestCode.BUY_PRODUCT_GAME_LOBBY_REQUEST or StoreRequestCode.REDEEM_CODE_REQUEST)
+        {
+            int userID = account.User.ID;
+            int requestedAccountID = account.ID;
+
+            return await UserInventoryTransaction.Execute(MerrickContext, userID, async user =>
+            {
+                Account refreshedAccount = await MerrickContext.Accounts.Include(queriedAccount => queriedAccount.User)
+                    .SingleAsync(queriedAccount => queriedAccount.ID == requestedAccountID);
+
+                return await HandleRequest(refreshedAccount, (int) requestCode);
+            }, HttpContext.RequestAborted);
+        }
+
+        return await HandleRequest(account, (int) requestCode);
+    }
+
+    private async Task<IActionResult> HandleRequest(Account account, int requestCode)
+    {
+        switch ((StoreRequestCode) requestCode)
         {
             case StoreRequestCode.LIST_STORE_ITEMS_REQUEST:
                 return ViewStore(account);
@@ -742,7 +761,7 @@ public class StoreController(MerrickContext databaseContext, IDatabase distribut
         response["totalMMPoints"] = user.SilverCoins;
         response["categoryID"] = categoryID;
         response["currentPage"] = currentPage;
-        response["customAccountIcon"] = 0;
+        response["customAccountIcon"] = user.OwnedStoreItems.Contains(CustomAccountIcons.PendingCode) ? 1 : 0;
         response["customAccountIconCost"] = 350;
         response["customAccountIconCostMMP"] = 1000;
         response["accountIconsUnlocked"] = 1;
@@ -869,7 +888,7 @@ public class StoreController(MerrickContext databaseContext, IDatabase distribut
         response["totalMMPoints"] = user.SilverCoins;
         response["categoryID"] = (int) StoreCategory.FeaturedHeroAvatars;
         response["currentPage"] = 1;
-        response["customAccountIcon"] = 0;
+        response["customAccountIcon"] = user.OwnedStoreItems.Contains(CustomAccountIcons.PendingCode) ? 1 : 0;
         response["customAccountIconCost"] = 350;
         response["customAccountIconCostMMP"] = 1000;
         response["accountIconsUnlocked"] = 1;

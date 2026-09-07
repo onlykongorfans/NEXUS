@@ -34,12 +34,16 @@ public partial class ClientRequesterController
             if (string.IsNullOrWhiteSpace(upgradeCode))
                 continue;
 
+            // An Empty Upload Entitlement Cannot Be Equipped
+            if (upgradeCode == "custom_icon")
+                continue;
+
             // Custom Account Icons Are Not In The Store Item List And Are Handled Separately
             if (upgradeCode.StartsWith("custom_icon:"))
             {
                 string prefixedCode = "ai." + upgradeCode;
 
-                if (account.User.OwnedStoreItems.Contains(prefixedCode))
+                if (CustomAccountIcons.GetSlotID(prefixedCode) is not null && account.User.OwnedStoreItems.Contains(prefixedCode))
                     selectedByPrefix["ai."] = prefixedCode;
 
                 continue;

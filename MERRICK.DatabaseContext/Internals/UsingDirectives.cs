@@ -3,6 +3,7 @@ global using ASPIRE.Common.Constants;
 global using ASPIRE.Common.Extensions.Collections;
 global using ASPIRE.Common.Extensions.Logging;
 global using ASPIRE.Common.Extensions.Services;
+global using ASPIRE.Common.Services;
 
 global using MERRICK.DatabaseContext.Constants;
 global using MERRICK.DatabaseContext.Data;
@@ -19,6 +20,7 @@ global using MERRICK.DatabaseContext.Persistence;
 global using MERRICK.DatabaseContext.Services;
 
 global using Microsoft.AspNetCore.HttpOverrides;
+global using Microsoft.AspNetCore.Routing;
 global using Microsoft.AspNetCore.Identity;
 global using Microsoft.EntityFrameworkCore;
 global using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -26,6 +28,7 @@ global using Microsoft.EntityFrameworkCore.Diagnostics;
 global using Microsoft.EntityFrameworkCore.Metadata.Builders;
 global using Microsoft.EntityFrameworkCore.Storage;
 global using Microsoft.Extensions.Diagnostics.HealthChecks;
+global using Microsoft.Extensions.Options;
 
 global using System.ComponentModel.DataAnnotations;
 global using System.ComponentModel.DataAnnotations.Schema;

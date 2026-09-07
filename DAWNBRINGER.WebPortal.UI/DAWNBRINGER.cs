@@ -111,6 +111,26 @@ public class DAWNBRINGER
         application.UseAntiforgery();
         application.MapStaticAssets();
 
+        application.MapGet(CustomAccountIconConfiguration.ImageRoute, async (int million, int thousand, int accountID, int slotID,
+            IHttpClientFactory clientFactory, HttpContext context) =>
+        {
+            context.Response.Headers.CacheControl = "no-store";
+
+            if (accountID <= 0 || slotID <= 0 || million != accountID / 1000000 || thousand != accountID / 1000 % 1000)
+                return Results.NotFound();
+
+            using HttpClient client = clientFactory.CreateClient(PortalAuthenticationService.HTTPClientName);
+            using HttpResponseMessage response = await client.GetAsync($"/icons/{million}/{thousand}/{accountID}/{slotID}.cai", context.RequestAborted);
+
+            if (response.IsSuccessStatusCode is false)
+                return Results.StatusCode((int) response.StatusCode);
+
+            byte[] image = await response.Content.ReadAsByteArrayAsync(context.RequestAborted);
+            context.Response.Headers.CacheControl = "public, max-age=31536000, immutable";
+            context.Response.Headers.XContentTypeOptions = "nosniff";
+            return Results.File(image, "image/png");
+        }).AllowAnonymous();
+
         // Map Razor Components With Interactive Server Render Mode
         application.MapRazorComponents<Components.Application>().AddInteractiveServerRenderMode();
 
