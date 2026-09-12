@@ -29,7 +29,11 @@ public sealed class NicknameChangeTests(KONGORIntegrationWebApplicationFactory w
         ISubscriber subscriber = distributedCache.Multiplexer.GetSubscriber();
         RedisChannel logoutChannel = RedisChannel.Literal(DistributedCacheExtensions.AccountLogoutChannel);
 
-        await subscriber.SubscribeAsync(logoutChannel, (_, value) => logoutNotification.TrySetResult(value.ToString()));
+        await subscriber.SubscribeAsync(logoutChannel, (_, value) =>
+        {
+            if (value.ToString() == session.AccountName)
+                logoutNotification.TrySetResult(session.AccountName);
+        });
 
         IDictionary<object, object> response;
         string loggedOutAccountName;
