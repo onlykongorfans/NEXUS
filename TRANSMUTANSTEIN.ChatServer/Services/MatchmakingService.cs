@@ -367,9 +367,9 @@ public class MatchmakingService : BackgroundService, IDisposable
             if (group.Members.Count is 0)
                 continue;
 
-            // A Solo Queue Group Does Not Persist Across Matches (Groups Are Keyed By The Leader's Account ID)
+            // Remove Only The Old Solo Group; The Player May Have Registered A Replacement Before This Match's Server Reset
             if (group.Members.Count is 1)
-                Groups.TryRemove(group.Leader.Account.ID, out _);
+                Groups.TryRemove(new KeyValuePair<int, MatchmakingGroup>(group.Leader.Account.ID, group));
 
             // A Premade Party Persists So It Can Re-Queue Together; Refresh The Client's Party Interface To Reflect The Cleared In-Game State
             else
@@ -443,7 +443,7 @@ public class MatchmakingService : BackgroundService, IDisposable
                 // A Solo Queue Group Does Not Persist Once The Match Starts; Disband It Server-Side (The Client Implicitly Drops It When It Connects To The Match), So No Update Is Broadcast
                 if (group.Members.Count is 1)
                 {
-                    Groups.TryRemove(group.Leader.Account.ID, out _);
+                    Groups.TryRemove(new KeyValuePair<int, MatchmakingGroup>(group.Leader.Account.ID, group));
 
                     continue;
                 }
