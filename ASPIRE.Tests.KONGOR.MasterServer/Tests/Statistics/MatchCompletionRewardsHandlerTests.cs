@@ -10,6 +10,78 @@ public sealed class MatchCompletionRewardsHandlerTests(KONGORIntegrationWebAppli
         => webApplicationFactory.WithSQLServerContainer().WithDistributedCacheContainer().InitialiseAsync();
 
     [Test]
+    public async Task Apply_Persists_Recorded_Mastery_Progression_While_Capping_Hero_Experience()
+    {
+        Account account = await SeedMainAccount("mastery.snapshot@kongor.com", "MasterySnapshot");
+        using IServiceScope scope = webApplicationFactory.Services.CreateScope();
+        MerrickContext databaseContext = scope.ServiceProvider.GetRequiredService<MerrickContext>();
+        Account trackedAccount = await databaseContext.Accounts.Include(candidate => candidate.User).SingleAsync(candidate => candidate.ID == account.ID);
+        Mastery mastery = await databaseContext.Masteries.SingleAsync(record => record.AccountID == trackedAccount.ID);
+        mastery.SetHeroExperienceByHeroIdentifier("Hero_Accursed", 36050);
+
+        foreach (string heroIdentifier in Heroes.AllHeroIdentifiers().Where(identifier => identifier != "Hero_Accursed").Take(12))
+            mastery.SetHeroExperienceByHeroIdentifier(heroIdentifier, Mastery.MaximumMasteryExperience);
+
+        await databaseContext.SaveChangesAsync();
+
+        MatchInformation matchInformation = MatchDataHelper.BuildMatchInformation(MatchType.AM_MATCHMAKING);
+        MatchStatistics matchStatistics = MatchDataHelper.BuildMatchStatistics();
+        MatchParticipantStatistics participant = MatchDataHelper.BuildParticipant(account.ID, account.Name, groupNumber: 1, win: 1, publicMatch: 0, rankedMatch: 1);
+        participant.HeroIdentifier = "Hero_Accursed";
+        participant.HeroLevel = 10;
+
+        await MatchCompletionRewardsHandler.Apply(databaseContext, NullLogger.Instance, trackedAccount, matchInformation, matchStatistics, participant);
+        databaseContext.MatchStatistics.Add(matchStatistics);
+        databaseContext.MatchParticipantStatistics.Add(participant);
+        await databaseContext.SaveChangesAsync();
+        databaseContext.ChangeTracker.Clear();
+
+        Mastery reloadedMastery = await databaseContext.Masteries.SingleAsync(record => record.AccountID == account.ID);
+        MatchParticipantStatistics reloadedParticipant = await databaseContext.MatchParticipantStatistics.SingleAsync(record => record.AccountID == account.ID);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(reloadedMastery.GetHeroExperienceByHeroIdentifier("Hero_Accursed")).IsEqualTo(Mastery.MaximumMasteryExperience);
+            await Assert.That(reloadedParticipant.MasteryProgression?.ExperienceBeforeMatch).IsEqualTo(36050);
+            await Assert.That(reloadedParticipant.MasteryProgression?.MatchExperience).IsEqualTo(200);
+            await Assert.That(reloadedParticipant.MasteryProgression?.BonusExperience).IsEqualTo(12);
+            await Assert.That(reloadedParticipant.MasteryProgression?.HeroesAtMaximumMasteryCount).IsEqualTo(12);
+            await Assert.That(reloadedParticipant.MasteryProgression?.ExperienceAfterMatch()).IsEqualTo(36262);
+        }
+    }
+
+    [Test]
+    public async Task Apply_Tracks_The_Highest_Medal_From_Placement_Completion_And_Preserves_It_After_A_Loss()
+    {
+        Account account = await SeedMainAccount("season.peak@kongor.com", "SeasonPeak");
+        using IServiceScope scope = webApplicationFactory.Services.CreateScope();
+        MerrickContext databaseContext = scope.ServiceProvider.GetRequiredService<MerrickContext>();
+        Account trackedAccount = await databaseContext.Accounts.Include(candidate => candidate.User).SingleAsync(candidate => candidate.ID == account.ID);
+        AccountStatistics statistics = await databaseContext.AccountStatistics.SingleAsync(record => record.AccountID == account.ID && record.Type == AccountStatisticsType.Matchmaking);
+        statistics.PlacementMatchesData = "11111";
+        statistics.SkillRating = 1540;
+        await databaseContext.SaveChangesAsync();
+
+        MatchInformation matchInformation = MatchDataHelper.BuildMatchInformation(MatchType.AM_MATCHMAKING);
+        MatchParticipantStatistics winParticipant = MatchDataHelper.BuildParticipant(account.ID, account.Name, groupNumber: 1, win: 1, publicMatch: 0, rankedMatch: 1, rankedSkillRatingChange: 40);
+        await MatchCompletionRewardsHandler.Apply(databaseContext, NullLogger.Instance, trackedAccount, matchInformation, MatchDataHelper.BuildMatchStatistics(), winParticipant);
+        await databaseContext.SaveChangesAsync();
+        await Assert.That(statistics.HighestMedal).IsEqualTo(Rank.GOLD_4);
+
+        MatchParticipantStatistics lossParticipant = MatchDataHelper.BuildParticipant(account.ID, account.Name, groupNumber: 1, loss: 1, matchID: 2, publicMatch: 0, rankedMatch: 1, rankedSkillRatingChange: -200);
+        await MatchCompletionRewardsHandler.Apply(databaseContext, NullLogger.Instance, trackedAccount, matchInformation, MatchDataHelper.BuildMatchStatistics(matchID: 2), lossParticipant);
+        await databaseContext.SaveChangesAsync();
+        databaseContext.ChangeTracker.Clear();
+        AccountStatistics reloadedStatistics = await databaseContext.AccountStatistics.SingleAsync(record => record.AccountID == account.ID && record.Type == AccountStatisticsType.Matchmaking);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(reloadedStatistics.CurrentMedal()).IsEqualTo(Rank.BRONZE_1);
+            await Assert.That(reloadedStatistics.HighestMedal).IsEqualTo(Rank.GOLD_4);
+        }
+    }
+
+    [Test]
     public async Task Apply_Solo_Win_Main_Account_First_Match_Applies_Match_Reward_And_Post_Signup_Bonus()
     {
         Account account = await SeedMainAccount("solo.win.first@kongor.com", "SoloWinFirst");

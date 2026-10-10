@@ -134,6 +134,9 @@
     [Inject]
     private IJSRuntime JSRuntime { get; set; } = null!;
 
+    [Inject]
+    private ISnackbar Snackbar { get; set; } = null!;
+
     private static readonly MudTheme Theme = new ()
     {
         PaletteDark = new PaletteDark
@@ -324,7 +327,16 @@
     {
         if (firstRender)
         {
-            CursorTrailEnabled = await JSRuntime.InvokeAsync<bool>("CursorTrail.isEnabled");
+            try
+            {
+                CursorTrailEnabled = await JSRuntime.InvokeAsync<bool>("CursorTrail.isEnabled");
+            }
+
+            catch (JSException)
+            {
+                CursorTrailEnabled = false;
+                Snackbar.Add("The cursor trail is unavailable.", Severity.Warning);
+            }
             StateHasChanged();
         }
     }
@@ -332,7 +344,16 @@
     private async Task ToggleCursorTrail()
     {
         bool enableCursorTrail = !CursorTrailEnabled;
-        CursorTrailEnabled = await JSRuntime.InvokeAsync<bool>(enableCursorTrail ? "CursorTrail.enable" : "CursorTrail.disable");
+
+        try
+        {
+            CursorTrailEnabled = await JSRuntime.InvokeAsync<bool>(enableCursorTrail ? "CursorTrail.enable" : "CursorTrail.disable");
+        }
+
+        catch (JSException)
+        {
+            Snackbar.Add("Unable to toggle the cursor trail.", Severity.Warning);
+        }
     }
 
     private void ToggleDrawer()

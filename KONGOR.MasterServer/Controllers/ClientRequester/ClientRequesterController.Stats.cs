@@ -2,6 +2,39 @@ namespace KONGOR.MasterServer.Controllers.ClientRequester;
 
 public partial class ClientRequesterController
 {
+    /// <summary>
+    ///     Returns recent match IDs for the named account without requiring a session, as expected by the legacy replay search.
+    /// </summary>
+    private async Task<IActionResult> GetLastMatchesFromNickname()
+    {
+        string? accountName = Request.Form["nickname"];
+
+        if (string.IsNullOrWhiteSpace(accountName))
+            return BadRequest(@"Missing Value For Form Parameter ""nickname""");
+
+        Account? account = await MerrickContext.Accounts.SingleOrDefaultAsync(account => account.Name.Equals(accountName));
+
+        if (account is null)
+            return NotFound($@"Account With Name ""{accountName}"" Was Not Found");
+
+        List<int> matchIDs = await MerrickContext.MatchParticipantStatistics
+            .Where(participant => participant.AccountID == account.ID)
+            .Join(MerrickContext.MatchStatistics, participant => participant.MatchID, match => match.MatchID, (participant, match) => match)
+            .OrderByDescending(match => match.TimestampRecorded)
+            .ThenByDescending(match => match.MatchID)
+            .Select(match => match.MatchID)
+            .Take(50)
+            .ToListAsync();
+
+        Dictionary<string, object> response = new ()
+        {
+            ["last_stats"] = matchIDs.ToDictionary(matchID => matchID, matchID => matchID.ToString()),
+            ["hosttime"] = Request.Form["hosttime"].ToString()
+        };
+
+        return Ok(PhpSerialization.Serialize(response));
+    }
+
     private async Task<IActionResult> GetPlayerAwardSummary()
     {
         string? accountName = Request.Form["nickname"];
@@ -181,20 +214,20 @@ public partial class ClientRequesterController
             aggregatedAwards.HighestCreepScoreAwards += statistics.AwardStatistics.HighestCreepScoreAwards;
         }
 
-        // Determine Top 4 Awards By Count
+        // Determine Top 4 Awards By Count; The Client Derives Each Award's Icon And Tooltip From Its Code, And Equal Counts Keep The Award Priority Order Of The Original API
         List<(string Name, int Count)> allAwards =
         [
+            ("awd_mkill", aggregatedAwards.MostKillsAwards),
             ("awd_masst", aggregatedAwards.MostAssistsAwards),
-            ("awd_mhdd", aggregatedAwards.MostHeroDamageDealtAwards),
             ("awd_mbdmg", aggregatedAwards.MostBuildingDamageAwards),
-            ("awd_lgks", aggregatedAwards.LongestKillStreakAwards),
-            ("awd_mkills", aggregatedAwards.MostKillsAwards),
-            ("awd_ldths", aggregatedAwards.LeastDeathsAwards),
+            ("awd_ledth", aggregatedAwards.LeastDeathsAwards),
+            ("awd_mann", aggregatedAwards.AnnihilationAwards),
             ("awd_mqk", aggregatedAwards.QuadKillAwards),
-            ("awd_smkd", aggregatedAwards.SmackdownAwards),
-            ("awd_annih", aggregatedAwards.AnnihilationAwards),
-            ("awd_mwk", aggregatedAwards.MostWardsDestroyedAwards),
-            ("awd_hcs", aggregatedAwards.HighestCreepScoreAwards)
+            ("awd_lgks", aggregatedAwards.LongestKillStreakAwards),
+            ("awd_msd", aggregatedAwards.SmackdownAwards),
+            ("awd_mhdd", aggregatedAwards.MostHeroDamageDealtAwards),
+            ("awd_hcs", aggregatedAwards.HighestCreepScoreAwards),
+            ("awd_mwk", aggregatedAwards.MostWardsDestroyedAwards)
         ];
 
         List<(string Name, int Count)> top4Awards = [.. allAwards.OrderByDescending(award => award.Count).Take(4)];
@@ -221,7 +254,7 @@ public partial class ClientRequesterController
                 RankedMatchesLost = rankedLosses,
                 WinStreak = 0, // TODO: Implement Win Streak Tracking
                 InPlacementPhase = (rankedStatistics?.IsInPlacementPhase ?? false) ? 1 : 0,
-                LevelsGainedThisSeason = account.User.TotalLevel
+                CurrentMedal = (int) (rankedStatistics?.CurrentMedal() ?? Rank.NO_MEDAL)
             },
             SimpleCasualSeasonStats = new SimpleSeasonStats
             {
@@ -229,7 +262,7 @@ public partial class ClientRequesterController
                 RankedMatchesLost = casualLosses,
                 WinStreak = 0, // TODO: Implement Win Streak Tracking
                 InPlacementPhase = (casualStatistics?.IsInPlacementPhase ?? false) ? 1 : 0,
-                LevelsGainedThisSeason = account.User.TotalLevel
+                CurrentMedal = (int) (casualStatistics?.CurrentMedal() ?? Rank.NO_MEDAL)
             },
             MVPAwardsCount = aggregatedAwards.MVPAwards,
             Top4AwardNames = [.. top4Awards.Select(award => award.Name)],
@@ -338,7 +371,7 @@ public partial class ClientRequesterController
                     Reward = new global::KONGOR.MasterServer.Models.RequestResponse.Stats.MasteryReward
                     {
                         ProductID = configuredReward.ProductIdentifier,
-                        ProductName = configuredReward.ProductName ?? string.Empty,
+                        ProductName = configuredReward.DisplayedProductName(),
                         ProductLocalContent = configuredReward.ProductLocalResource ?? string.Empty,
                         Quantity = configuredReward.ProductQuantity,
                         GoldCoins = configuredReward.GoldCoins,
@@ -774,44 +807,26 @@ public partial class ClientRequesterController
 
             AccountStatisticsType masteryStatisticsType = MatchCompletionRewardsHandler.ResolveAccountStatisticsType(matchInformation);
 
-            int heroMatchExperience = mastery.CalculateMatchExperience(masteryStatisticsType, requestingPlayerStatistics.HeroLevel);
-            int heroBonusExperience = mastery.CalculateBonusExperience(masteryStatisticsType, Heroes.TotalHeroCount);
-            int heroCurrentExperience = mastery.GetHeroExperienceByHeroIdentifier(requestingPlayerStatistics.HeroIdentifier);
-
             MasteryBoostContext? masteryBoostContext = requestingPlayerStatistics.MasteryBoostExperience is int boostExperience
                 ? new MasteryBoostContext(boostExperience, requestingPlayerStatistics.MasteryBoostIsSuperBoost)
                 : await DistributedCache.GetMasteryBoostContext(account.ID, matchStatistics.MatchID);
 
-            // The Match, Bonus, And Boost Experience Are Accrued Into The Persisted Total During Statistics Submission And Boost Application
-            // The Client Treats "mastery_exp_original" As The Pre-Match Starting Value And Adds The Match, Bonus, And Boost Experience On Top Of It, So The Accrued Amounts Are Subtracted Back Out Here
-            int preMatchExperience = Math.Max(0, heroCurrentExperience - heroMatchExperience - heroBonusExperience - (masteryBoostContext?.Experience ?? 0));
+            MasteryProgression? progression = MasteryProgressionHelper.Resolve(mastery, requestingPlayerStatistics, masteryStatisticsType, masteryBoostContext);
+            MasteryBoostRejection? boostRejection = await MasteryBoostEligibility.GetRejection(MerrickContext, mastery, requestingPlayerStatistics,
+                matchStatistics, progression, masteryBoostContext);
 
-            // A Mastery Boost May Only Be Applied Once, Only To The Account's Most Recent Match Before Another Game Is Started, And Only Within The Boost Application Window
-            // The Boost Is Therefore Disabled When An Older Match Is Viewed In The Match History
-            // Match IDs Are Not Chronological, So The Most Recent Match Is Resolved By The Recorded Timestamp Rather Than By The Largest Match ID
-            int mostRecentMatchID = await MerrickContext.MatchParticipantStatistics
-                .Where(statistics => statistics.AccountID == account.ID)
-                .Join(MerrickContext.MatchStatistics, participant => participant.MatchID, match => match.MatchID, (participant, match) => match)
-                .OrderByDescending(match => match.TimestampRecorded)
-                .Select(match => match.MatchID)
-                .FirstAsync();
+            // Recorded Progression Remains Stable When Later Games Change The Hero's Experience; Legacy Matches Retain A Reconstruction Fallback
+            progression ??= new MasteryProgression();
 
-            bool isMostRecentMatch = matchStatistics.MatchID == mostRecentMatchID;
-
-            bool masteryCanBoost = isMostRecentMatch && heroMatchExperience > 0 && masteryBoostContext is null
-                && matchStatistics.TimestampRecorded >= DateTimeOffset.UtcNow - MasteryBoost.ApplicationWindow
-                && Mastery.GetLevelFromExperience(heroCurrentExperience) < Mastery.MaximumMasteryLevel;
-
-            // The Applied Experience Is Reported In The Response Field Matching The Boost Type, Mirroring The Original API Contract
-            matchMastery = new MatchMastery(requestingPlayerStatistics.HeroIdentifier, preMatchExperience, heroMatchExperience, heroBonusExperience)
+            matchMastery = new MatchMastery(requestingPlayerStatistics.HeroIdentifier, progression.ExperienceAfterMatch(), progression.MatchExperience, progression.BonusExperience)
             {
-                MasteryExperienceBoost = masteryBoostContext is { IsSuperBoost: false } ? masteryBoostContext.Experience : 0,
-                MasteryExperienceSuperBoost = masteryBoostContext is { IsSuperBoost: true } ? masteryBoostContext.Experience : 0,
-                MasteryExperienceMaximumLevelHeroesCount = mastery.HeroesAtMaximumMasteryCount(),
+                MasteryExperienceBoost = progression.BoostExperience,
+                MasteryExperienceSuperBoost = progression.SuperBoostExperience,
+                MasteryExperienceMaximumLevelHeroesCount = progression.HeroesAtMaximumMasteryCount,
                 MasteryExperienceBoostProductCount = MasteryConsumables.MasteryBoostsOwned(account.User),
                 MasteryExperienceSuperBoostProductCount = MasteryConsumables.SuperMasteryBoostsOwned(account.User),
-                MasteryExperienceCanBoost = masteryCanBoost,
-                MasteryExperienceCanSuperBoost = masteryCanBoost
+                MasteryExperienceCanBoost = boostRejection is null,
+                MasteryExperienceCanSuperBoost = boostRejection is null
             };
         }
 

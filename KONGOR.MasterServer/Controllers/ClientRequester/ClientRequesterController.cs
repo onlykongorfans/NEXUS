@@ -29,7 +29,9 @@ public partial class ClientRequesterController(MerrickContext databaseContext, I
     [HttpPost(Name = "Client Requester All-In-One")]
     public async Task<IActionResult> ClientRequester()
     {
-        bool endpointRequiresCookieValidation = Request.Query["f"].SingleOrDefault() is not "auth" and not "pre_auth" and not "srpAuth";
+        string? function = Request.Query["f"].SingleOrDefault() ?? Request.Form["f"].SingleOrDefault();
+
+        bool endpointRequiresCookieValidation = function is not "auth" and not "pre_auth" and not "srpAuth" and not "grab_last_matches_from_nick";
         (bool accountSessionCookieIsValid, string? sessionAccountName) = await DistributedCache.ValidateAccountSessionCookie(Request.Form["cookie"].ToString() ?? "NULL");
 
         if (endpointRequiresCookieValidation.Equals(true) && accountSessionCookieIsValid.Equals(false))
@@ -99,6 +101,7 @@ public partial class ClientRequesterController(MerrickContext databaseContext, I
 
             // statistics
             "get_account_all_hero_stats"    => await GetHeroStatistics(sessionAccountName),
+            "grab_last_matches_from_nick"   => await GetLastMatchesFromNickname(),
             "get_match_stats"               => await GetMatchStatistics(),
             "take_mastery_reward"           => await TakeMasteryReward(),
             "boost_match_mastery"           => await BoostMatchMastery(),
@@ -156,6 +159,7 @@ public partial class ClientRequesterController(MerrickContext databaseContext, I
             "get_hero_stats"                => await GetSelectedHeroStatistics(),
             "get_campaign_hero_stats"       => await GetCampaignHeroStatistics(),
             "get_hero_usage_list"           => await GetHeroUsageList(),
+            "grab_last_matches_from_nick"   => await GetLastMatchesFromNickname(),
 
             // store
             "get_daily_special"             => await GetDailySpecial(),

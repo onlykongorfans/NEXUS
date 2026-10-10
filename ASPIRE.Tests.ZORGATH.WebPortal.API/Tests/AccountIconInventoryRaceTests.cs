@@ -26,6 +26,13 @@ public sealed class AccountIconInventoryRaceTests(ZORGATHIntegrationWebApplicati
             seedContext.Accounts.AddRange(mainAccount, subAccount);
             await seedContext.SaveChangesAsync();
 
+            if (masteryReward)
+            {
+                Mastery mastery = await seedContext.Masteries.SingleAsync(record => record.AccountID == subAccount.ID);
+                mastery.SetHeroExperienceByHeroIdentifier("Hero_Accursed", 3000);
+                await seedContext.SaveChangesAsync();
+            }
+
             string cookie = Guid.NewGuid().ToString("N");
             await factory.Services.GetRequiredService<IDatabase>().SetAccountNameForSessionCookie(cookie, subAccount.Name);
 

@@ -18,7 +18,7 @@ namespace MERRICK.DatabaseContext.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("data")
-                .HasAnnotation("ProductVersion", "10.0.9")
+                .HasAnnotation("ProductVersion", "10.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -371,6 +371,9 @@ namespace MERRICK.DatabaseContext.Migrations
                         .HasColumnType("int");
 
                     b.Property<int>("HeroKills")
+                        .HasColumnType("int");
+
+                    b.Property<int>("HighestMedal")
                         .HasColumnType("int");
 
                     b.Property<int>("MatchesConceded")
@@ -1528,9 +1531,39 @@ namespace MERRICK.DatabaseContext.Migrations
                                 .HasForeignKey("MatchParticipantStatisticsID");
                         });
 
+                    b.OwnsOne("MERRICK.DatabaseContext.Entities.Statistics.MasteryProgression", "MasteryProgression", b1 =>
+                        {
+                            b1.Property<int>("MatchParticipantStatisticsID");
+
+                            b1.Property<int>("BonusExperience");
+
+                            b1.Property<int>("BoostExperience");
+
+                            b1.Property<int>("ExperienceBeforeMatch");
+
+                            b1.Property<int>("HeroesAtMaximumMasteryCount");
+
+                            b1.Property<int>("MatchExperience");
+
+                            b1.Property<int>("SuperBoostExperience");
+
+                            b1.HasKey("MatchParticipantStatisticsID");
+
+                            b1.ToTable("MatchParticipantStatistics", "stat");
+
+                            b1
+                                .ToJson("MasteryProgression")
+                                .HasColumnType("nvarchar(max)");
+
+                            b1.WithOwner()
+                                .HasForeignKey("MatchParticipantStatisticsID");
+                        });
+
                     b.Navigation("AbilityHistory");
 
                     b.Navigation("ItemHistory");
+
+                    b.Navigation("MasteryProgression");
                 });
 
             modelBuilder.Entity("MERRICK.DatabaseContext.Entities.Statistics.MatchStatistics", b =>

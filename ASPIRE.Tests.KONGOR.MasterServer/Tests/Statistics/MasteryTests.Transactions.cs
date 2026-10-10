@@ -22,7 +22,7 @@ public sealed partial class MasteryTests_Integration
         await Assert.That(await cache.GetMasteryBoostContext(account.ID, 1)).IsNull();
         await AssertBoostState(account, expectedExperience: 200, expectedBoosts: 2, expectedMarker: null);
         await Assert.That(BoostErrorCode(await ExecuteBoost(cookie))).IsEqualTo(0);
-        await AssertBoostState(account, expectedExperience: 600, expectedBoosts: 1, expectedMarker: 400);
+        await AssertBoostState(account, expectedExperience: 400, expectedBoosts: 1, expectedMarker: 200);
     }
 
     [Test]
@@ -42,7 +42,7 @@ public sealed partial class MasteryTests_Integration
         try
         {
             await publicationStarted.Task.WaitAsync(TimeSpan.FromSeconds(30));
-            await AssertBoostState(account, expectedExperience: 600, expectedBoosts: 1, expectedMarker: 400);
+            await AssertBoostState(account, expectedExperience: 400, expectedBoosts: 1, expectedMarker: 200);
             await Assert.That(await cache.GetMasteryBoostContext(account.ID, 1)).IsNull();
             IActionResult second = await ExecuteBoost(cookie).WaitAsync(TimeSpan.FromSeconds(10));
             await Assert.That(BoostErrorCode(second)).IsEqualTo(4);
@@ -55,7 +55,7 @@ public sealed partial class MasteryTests_Integration
 
         await Assert.That(BoostErrorCode(await first)).IsEqualTo(0);
         await Assert.That(proxy.PublicationAttempts).IsEqualTo(1);
-        await AssertBoostState(account, expectedExperience: 600, expectedBoosts: 1, expectedMarker: 400);
+        await AssertBoostState(account, expectedExperience: 400, expectedBoosts: 1, expectedMarker: 200);
     }
 
     [Test]
@@ -68,7 +68,7 @@ public sealed partial class MasteryTests_Integration
         await Assert.That(BoostErrorCode(await ExecuteBoost(cookie, cache))).IsEqualTo(0);
         await Assert.That(proxy.PublicationAttempts).IsEqualTo(1);
         await Assert.That(await cache.GetMasteryBoostContext(account.ID, 1)).IsNull();
-        await AssertBoostState(account, expectedExperience: 600, expectedBoosts: 1, expectedMarker: 400);
+        await AssertBoostState(account, expectedExperience: 400, expectedBoosts: 1, expectedMarker: 200);
 
         proxy.FailReads = true;
         await Assert.That(BoostErrorCode(await ExecuteBoost(cookie, cache))).IsEqualTo(4);
@@ -79,8 +79,8 @@ public sealed partial class MasteryTests_Integration
         });
         IDictionary<object, object> body = await PlinkoTestsHelper.DeserialisePhpResponse(response);
         IDictionary<object, object> mastery = (IDictionary<object, object>) body["match_mastery"];
-        await Assert.That(Convert.ToInt32(mastery["mastery_exp_boost"])).IsEqualTo(400);
-        await Assert.That(Convert.ToInt32(mastery["mastery_exp_original"])).IsEqualTo(0);
+        await Assert.That(Convert.ToInt32(mastery["mastery_exp_boost"])).IsEqualTo(200);
+        await Assert.That(Convert.ToInt32(mastery["mastery_exp_original"])).IsEqualTo(400);
         await Assert.That(Convert.ToBoolean(mastery["mastery_canboost"])).IsFalse();
         await Assert.That(Convert.ToBoolean(mastery["mastery_super_canboost"])).IsFalse();
     }
@@ -88,7 +88,7 @@ public sealed partial class MasteryTests_Integration
     [Test]
     public async Task Legacy_Cached_Boost_Is_Preserved_Without_Consuming_Another_Boost()
     {
-        (Account account, string cookie) = await SeedBoostTransaction("BoostLegacy");
+        (Account account, string cookie) = await SeedBoostTransaction("BoostLegacy", legacyMatch: true);
         IDatabase cache = CreateBoostCacheProxy(out BoostCacheProxy proxy);
         await cache.SetMasteryBoostContext(account.ID, 1, new MasteryBoostContext(400, false));
         await SetHeroExperience(account, "Hero_Accursed", 600);
@@ -101,10 +101,94 @@ public sealed partial class MasteryTests_Integration
         await Assert.That(proxy.PublicationAttempts).IsEqualTo(1);
     }
 
-    private async Task<(Account Account, string Cookie)> SeedBoostTransaction(string accountName)
+    [Test]
+    public async Task An_Unboosted_Legacy_Match_Can_Be_Boosted_And_Records_Its_Progression()
+    {
+        (Account account, string cookie) = await SeedBoostTransaction("BoostLegacyNew", legacyMatch: true);
+
+        await Assert.That(BoostErrorCode(await ExecuteBoost(cookie))).IsEqualTo(0);
+        await AssertBoostState(account, expectedExperience: 400, expectedBoosts: 1, expectedMarker: 200);
+
+        using IServiceScope scope = webApplicationFactory.Services.CreateScope();
+        MerrickContext context = scope.ServiceProvider.GetRequiredService<MerrickContext>();
+        MatchParticipantStatistics participant = await context.MatchParticipantStatistics.SingleAsync(participant => participant.AccountID == account.ID && participant.MatchID == 1);
+
+        await Assert.That(participant.MasteryProgression).IsNotNull();
+        await Assert.That(participant.MasteryProgression?.ExperienceAfterMatch()).IsEqualTo(400);
+    }
+
+    [Test]
+    public async Task Legacy_Cached_Boost_Statistics_Retain_Their_Original_Experience_And_Read_Without_Rewriting()
+    {
+        (Account account, string cookie) = await SeedBoostTransaction("LegacyBoostStat", legacyMatch: true);
+        IDatabase cache = webApplicationFactory.Services.GetRequiredService<IDatabase>();
+        await cache.SetMasteryBoostContext(account.ID, 1, new MasteryBoostContext(400, false));
+        await SetHeroExperience(account, "Hero_Accursed", 600);
+
+        using HttpResponseMessage response = await PostClientRequest("get_match_stats", new Dictionary<string, string>
+        {
+            ["cookie"] = cookie, ["match_id"] = "1"
+        });
+        IDictionary<object, object> body = await PlinkoTestsHelper.DeserialisePhpResponse(response);
+        IDictionary<object, object> mastery = (IDictionary<object, object>) body["match_mastery"];
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(Convert.ToInt32(mastery["mastery_exp_boost"])).IsEqualTo(400);
+            await Assert.That(Convert.ToInt32(mastery["mastery_exp_original"])).IsEqualTo(600);
+            await Assert.That(Convert.ToBoolean(mastery["mastery_canboost"])).IsFalse();
+        }
+
+        await AssertBoostState(account, expectedExperience: 600, expectedBoosts: 2, expectedMarker: null);
+        using IServiceScope scope = webApplicationFactory.Services.CreateScope();
+        MerrickContext context = scope.ServiceProvider.GetRequiredService<MerrickContext>();
+        MatchParticipantStatistics participant = await context.MatchParticipantStatistics.SingleAsync(participant => participant.AccountID == account.ID && participant.MatchID == 1);
+        await Assert.That(participant.MasteryProgression).IsNull();
+    }
+
+    [Test]
+    public async Task A_Durable_Boost_From_Older_Binaries_Is_Reported_Alongside_Recorded_Progression()
+    {
+        (Account account, string cookie) = await SeedBoostTransaction("BoostOldBinary");
+        using (IServiceScope scope = webApplicationFactory.Services.CreateScope())
+        {
+            MerrickContext context = scope.ServiceProvider.GetRequiredService<MerrickContext>();
+            MatchParticipantStatistics participant = await context.MatchParticipantStatistics.SingleAsync(participant => participant.AccountID == account.ID && participant.MatchID == 1);
+            participant.MasteryBoostExperience = 400;
+            await context.SaveChangesAsync();
+        }
+        await SetHeroExperience(account, "Hero_Accursed", 600);
+
+        using HttpResponseMessage response = await PostClientRequest("get_match_stats", new Dictionary<string, string>
+        {
+            ["cookie"] = cookie, ["match_id"] = "1"
+        });
+        IDictionary<object, object> body = await PlinkoTestsHelper.DeserialisePhpResponse(response);
+        IDictionary<object, object> mastery = (IDictionary<object, object>) body["match_mastery"];
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(Convert.ToInt32(mastery["mastery_exp_boost"])).IsEqualTo(400);
+            await Assert.That(Convert.ToInt32(mastery["mastery_exp_original"])).IsEqualTo(600);
+            await Assert.That(Convert.ToBoolean(mastery["mastery_canboost"])).IsFalse();
+        }
+        await Assert.That(BoostErrorCode(await ExecuteBoost(cookie))).IsEqualTo(4);
+    }
+
+    private async Task<(Account Account, string Cookie)> SeedBoostTransaction(string accountName, bool legacyMatch = false)
     {
         (Account account, string cookie) = await SeedAuthenticatedAccount($"{accountName}@example.invalid", accountName);
         await SeedRankedMatch(account, matchID: 1, heroIdentifier: "Hero_Accursed", heroLevel: 10);
+
+        if (legacyMatch)
+        {
+            using IServiceScope scope = webApplicationFactory.Services.CreateScope();
+            MerrickContext context = scope.ServiceProvider.GetRequiredService<MerrickContext>();
+            MatchParticipantStatistics participant = await context.MatchParticipantStatistics.SingleAsync(participant => participant.AccountID == account.ID && participant.MatchID == 1);
+            participant.MasteryProgression = null;
+            await context.SaveChangesAsync();
+        }
+
         await SetHeroExperience(account, "Hero_Accursed", 200);
         await GrantMasteryBoosts(account, regularBoosts: 2, superBoosts: 0);
         return (account, cookie);

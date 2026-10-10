@@ -216,6 +216,11 @@ public class MatchParticipantStatistics
     public List<ItemEvent>? ItemHistory { get; set; }
 
     public List<AbilityEvent>? AbilityHistory { get; set; }
+
+    /// <summary>
+    ///     The mastery progression recorded for this match; null for legacy matches or modes that do not award mastery experience.
+    /// </summary>
+    public MasteryProgression? MasteryProgression { get; set; }
 }
 
 public class ItemEvent
@@ -236,4 +241,28 @@ public class AbilityEvent
     public required int GameTimeSeconds { get; set; }
 
     public required byte SlotIndex { get; set; }
+}
+
+/// <summary>
+///     Records the mastery experience awarded by a match independently of subsequent matches and formula changes.
+/// </summary>
+public class MasteryProgression
+{
+    public int ExperienceBeforeMatch { get; set; }
+
+    public int MatchExperience { get; set; }
+
+    public int HeroesAtMaximumMasteryCount { get; set; }
+
+    public int BonusExperience { get; set; }
+
+    public int BoostExperience { get; set; }
+
+    public int SuperBoostExperience { get; set; }
+
+    /// <summary>
+    ///     The uncapped experience after this match, so the client can subtract awards without showing a false level-up at the maximum level.
+    /// </summary>
+    public int ExperienceAfterMatch()
+        => ExperienceBeforeMatch + MatchExperience + BonusExperience + BoostExperience + SuperBoostExperience;
 }

@@ -33,4 +33,10 @@ public partial class MasteryReward
     public required string? ProductCode { get; set; }
 
     public required string? ProductLocalResource { get; set; }
+
+    /// <summary>
+    ///     The product name displayed after the quantity, pluralised only when more than one product is awarded.
+    /// </summary>
+    public string DisplayedProductName()
+        => ProductName is not null && ProductQuantity > 1 && ProductName.EndsWith('s').Equals(false) ? $"{ProductName}s" : ProductName ?? string.Empty;
 }

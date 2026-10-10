@@ -232,7 +232,10 @@ public static class SeedDataHandlers
             .Where(statistics => staffAccountIDs.Contains(statistics.AccountID)).ToListAsync(cancellationToken);
 
         foreach (AccountStatistics statistics in staffAccountStatistics)
+        {
             statistics.SkillRating = 1850.0;
+            statistics.HighestMedal = statistics.CurrentMedal();
+        }
 
         await context.SaveChangesAsync(cancellationToken);
 

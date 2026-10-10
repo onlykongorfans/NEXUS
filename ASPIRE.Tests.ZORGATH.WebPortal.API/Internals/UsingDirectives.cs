@@ -19,6 +19,7 @@ global using KONGOR.MasterServer.Services;
 
 global using MERRICK.DatabaseContext.Constants;
 global using MERRICK.DatabaseContext.Entities.Core;
+global using MERRICK.DatabaseContext.Entities.Statistics;
 global using MERRICK.DatabaseContext.Entities.Utility;
 global using MERRICK.DatabaseContext.Enumerations;
 global using MERRICK.DatabaseContext.Extensions;
