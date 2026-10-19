@@ -118,35 +118,13 @@ public static class SRPAuthenticationHandlers
 
     private static List<string> SetChatChannels(Account account)
     {
-        List<string> channels = account.AutoConnectChatChannels;
+        // Reserved Channels Follow Current Clan And Role Entitlements Rather Than Previously Saved Names
+        IEnumerable<string> savedChannels = account.AutoConnectChatChannels
+            .Where(channel => ChatChannels.IsReservedChannel(channel) is false)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
 
-        if (account.Type is not AccountType.ServerHost)
-            channels = channels.Prepend(ChatChannels.GeneralChannel).ToList();
-
-        if (account.Clan is not null)
-            channels.Add(account.Clan.GetChatChannelName());
-
-        if (account.Type is AccountType.GameMaster or AccountType.Staff)
-            channels.Add(ChatChannels.GameMastersChannel);
-
-        if (account.Type is AccountType.Guest or AccountType.Staff)
-            channels.Add(ChatChannels.GuestsChannel);
-
-        if (account.Type is AccountType.ServerHost or AccountType.Staff)
-            channels.Add(ChatChannels.ServerHostsChannel);
-
-        if (account.Type is AccountType.Streamer or AccountType.Staff)
-            channels.Add(ChatChannels.StreamersChannel);
-
-        if (account.Type is AccountType.VIP or AccountType.Staff)
-            channels.Add(ChatChannels.VIPChannel);
-
-        if (account.Type is AccountType.Staff)
-            channels.Add(ChatChannels.StaffChannel);
-
-        channels = channels.Distinct().Order().ToList();
-
-        return channels;
+        // Defaults Come First Because The Client Reads Only A Limited Number Of Login Channels
+        return [.. account.GetDefaultChatChannels(), .. savedChannels];
     }
 
     private static Dictionary<string, Dictionary<string, FriendAccount>> SetFriendAccountList(Account account)

@@ -289,18 +289,14 @@ public class MatchmakingGroup
             {
                 if (ChatChannel.Members.ContainsKey(existingMember.Account.Name) is false)
                 {
-                    ChatChannelMember existingChannelMember = new (existingMember.Session, ChatChannel);
-                    ChatChannel.Members.TryAdd(existingMember.Account.Name, existingChannelMember);
-                    existingMember.Session.CurrentChannels.Add(ChatChannel.ID);
+                    ChatChannel.AddInternalMember(existingMember.Session);
                 }
             }
         }
 
         else if (ChatChannel.Members.ContainsKey(session.Account.Name) is false)
         {
-            ChatChannelMember channelMember = new (session, ChatChannel);
-            ChatChannel.Members.TryAdd(session.Account.Name, channelMember);
-            session.CurrentChannels.Add(ChatChannel.ID);
+            ChatChannel.AddInternalMember(session);
         }
 
         await LoadMemberStatistics(merrick);
@@ -714,9 +710,7 @@ public class MatchmakingGroup
         // Remove Member From Group Chat Channel
         if (ChatChannel is not null)
         {
-            ChatChannel.Members.TryRemove(memberToRemove.Account.Name, out _);
-
-            memberToRemove.Session.CurrentChannels.Remove(ChatChannel.ID);
+            ChatChannel.RemoveInternalMember(memberToRemove.Session);
         }
 
         // Remove Member From Group
@@ -728,9 +722,7 @@ public class MatchmakingGroup
         {
             foreach (MatchmakingGroupMember remainingMember in Members)
             {
-                ChatChannel.Members.TryRemove(remainingMember.Account.Name, out _);
-
-                remainingMember.Session.CurrentChannels.Remove(ChatChannel.ID);
+                ChatChannel.RemoveInternalMember(remainingMember.Session);
             }
 
             if (ChatChannel.Members.IsEmpty)
@@ -853,9 +845,7 @@ public class MatchmakingGroup
         {
             foreach (MatchmakingGroupMember member in Members)
             {
-                ChatChannel.Members.TryRemove(member.Account.Name, out _);
-
-                member.Session.CurrentChannels.Remove(ChatChannel.ID);
+                ChatChannel.RemoveInternalMember(member.Session);
             }
 
             // Remove The Chat Channel If Empty

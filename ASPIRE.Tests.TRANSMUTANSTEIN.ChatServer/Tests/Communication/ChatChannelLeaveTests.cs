@@ -46,7 +46,8 @@ public sealed class ChatChannelLeaveTests
     [Test]
     public async Task Leaving_A_Joined_Channel_Removes_The_Session_From_It()
     {
-        ClientChatSession session = CreateSession("JoinedLeaver");
+        await using RunningClientSession client = RunningClientSession.Start(CreateAccount("JoinedLeaver"));
+        ClientChatSession session = client.Session;
         ChatChannel channel = ChatChannel.GetOrCreate(session, "Joined Leave Channel");
         ChatChannelMember member = new (session, channel);
 
@@ -63,6 +64,7 @@ public sealed class ChatChannelLeaveTests
         {
             await Assert.That(channel.Members.ContainsKey(session.Account.Name)).IsFalse();
             await Assert.That(session.CurrentChannels).DoesNotContain(channel.ID);
+            await Assert.That(await client.ReadCommand()).IsEqualTo((ushort) ChatProtocol.Command.CHAT_CMD_LEFT_CHANNEL);
         }
     }
 

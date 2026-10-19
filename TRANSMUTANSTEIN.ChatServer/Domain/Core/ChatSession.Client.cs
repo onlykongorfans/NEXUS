@@ -165,9 +165,7 @@ public class ClientChatSession(ConnectionContext connection, IServiceProvider se
         // Join The Match Channel (Silent Join - No Full Broadcast To Channel Members)
         if (matchChannel.Members.ContainsKey(Account.Name) is false)
         {
-            ChatChannelMember newMember = new (this, matchChannel);
-            matchChannel.Members.TryAdd(Account.Name, newMember);
-            CurrentChannels.Add(matchChannel.ID);
+            matchChannel.AddInternalMember(this);
         }
 
         return this;
@@ -201,22 +199,25 @@ public class ClientChatSession(ConnectionContext connection, IServiceProvider se
     /// <param name="flags">Channel flags to filter which channels to leave. If zero, leaves all channels.</param>
     public ClientChatSession LeaveAllChannels(ChatProtocol.ChatChannelType flags = 0)
     {
-        List<ChatChannel> channelsToLeave = [.. Context.ChatChannels.Values
-            .Where(channel => channel.Members.ContainsKey(Account.Name))
-            .Where(channel =>
-            {
-                // If No Flags Specified, Leave All Channels
-                if (flags == 0)
-                    return true;
+        lock (ChatChannel.MembershipSynchronisation)
+        {
+            List<ChatChannel> channelsToLeave = [.. Context.ChatChannels.Values
+                .Where(channel => channel.Members.ContainsKey(Account.Name))
+                .Where(channel =>
+                {
+                    // If No Flags Specified, Leave All Channels
+                    if (flags == 0)
+                        return true;
 
-                // Otherwise, Only Leave Channels That Have ALL Specified Flags
-                return channel.Flags.HasFlag(flags);
-            })];
+                    // Otherwise, Only Leave Channels That Have ALL Specified Flags
+                    return channel.Flags.HasFlag(flags);
+                })];
 
-        foreach (ChatChannel channel in channelsToLeave)
-            channel.Leave(this);
+            foreach (ChatChannel channel in channelsToLeave)
+                channel.Leave(this);
 
-        return this;
+            return this;
+        }
     }
 
     /// <summary>
@@ -225,14 +226,17 @@ public class ClientChatSession(ConnectionContext connection, IServiceProvider se
     /// </summary>
     public ClientChatSession RejoinDefaultChannel()
     {
-        // Get Or Create The Next Available General Channel (With Overflow Support)
-        ChatChannel defaultChannel = ChatChannel.GetOrCreateGeneralChannel();
+        lock (ChatChannel.MembershipSynchronisation)
+        {
+            // Get Or Create The Next Available General Channel (With Overflow Support)
+            ChatChannel defaultChannel = ChatChannel.GetOrCreateGeneralChannel();
 
-        // Join The Default Channel If Not Already A Member
-        if (defaultChannel.Members.ContainsKey(Account.Name) is false)
-            defaultChannel.Join(this);
+            // Join The Default Channel If Not Already A Member
+            if (defaultChannel.Members.ContainsKey(Account.Name) is false)
+                defaultChannel.Join(this);
 
-        return this;
+            return this;
+        }
     }
 
     /// <summary>

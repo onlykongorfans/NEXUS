@@ -27,6 +27,7 @@ global using Microsoft.Extensions.Logging.Abstractions;
 global using StackExchange.Redis;
 
 global using ASPIRE.Common;
+global using ASPIRE.Common.Communication;
 global using ASPIRE.Common.Constants;
 
 global using MERRICK.DatabaseContext.Entities.Core;

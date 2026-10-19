@@ -20,10 +20,26 @@ public partial class ClientRequesterController
             return accountResult.AsT1;
 
         Account account = accountResult.AsT0;
+        List<string> defaultChannels = account.GetDefaultChatChannels();
+
+        // Default Channels Are Already Joined On Login And Must Not Occupy Saved-Channel Slots
+        if (account.IsDefaultChatChannel(chatChannelName))
+            return Ok(PhpSerialization.Serialize(new Dictionary<string, string> { { "add_room", "OK" } }));
+
+        if (ChatChannels.IsReservedChannel(chatChannelName))
+            return AutoConnectChannelFailure("add_room", "Reserved Chat Channels Cannot Be Saved To The Auto-Connect List");
+
         bool channelWasAdded = account.AutoConnectChatChannels.Any(channelName => channelName.Equals(chatChannelName, StringComparison.OrdinalIgnoreCase)) is false;
 
         if (channelWasAdded)
         {
+            int savedChannelCount = account.AutoConnectChatChannels
+                .Where(channelName => ChatChannels.IsReservedChannel(channelName) is false)
+                .Distinct(StringComparer.OrdinalIgnoreCase).Count();
+
+            if (account.Type is not AccountType.Staff && defaultChannels.Count + savedChannelCount >= ChatProtocol.MAX_CHANNELS_PER_CLIENT)
+                return AutoConnectChannelFailure("add_room", $"An Account Cannot Auto-Connect To More Than {ChatProtocol.MAX_CHANNELS_PER_CLIENT} Channels");
+
             account.AutoConnectChatChannels.Add(chatChannelName);
 
             await MerrickContext.SaveChangesAsync();
@@ -53,6 +69,9 @@ public partial class ClientRequesterController
             return accountResult.AsT1;
 
         Account account = accountResult.AsT0;
+        if (account.IsDefaultChatChannel(chatChannelName))
+            return AutoConnectChannelFailure("remove_room", "Default Chat Channels Cannot Be Removed From The Auto-Connect List");
+
         int removedChannelCount = account.AutoConnectChatChannels.RemoveAll(channelName => channelName.Equals(chatChannelName, StringComparison.OrdinalIgnoreCase));
 
         if (removedChannelCount > 0)
@@ -102,6 +121,8 @@ public partial class ClientRequesterController
             return Unauthorized(@"Unrecognised Session Cookie");
 
         Account? account = await MerrickContext.Accounts
+            .Include(candidate => candidate.Clan)
+            .Include(candidate => candidate.User).ThenInclude(user => user.Accounts)
             .SingleOrDefaultAsync(candidate => candidate.Name.Equals(accountName));
 
         if (account is null)
@@ -132,4 +153,7 @@ public partial class ClientRequesterController
 
         return null;
     }
+
+    private IActionResult AutoConnectChannelFailure(string function, string message)
+        => Ok(PhpSerialization.Serialize(new Dictionary<string, object> { { function, false }, { "error", message } }));
 }
