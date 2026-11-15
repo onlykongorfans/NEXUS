@@ -3,13 +3,14 @@
 [ApiController]
 [Route("server_requester.php")]
 [Consumes("application/x-www-form-urlencoded")]
-public partial class ServerRequesterController(MerrickContext databaseContext, IDatabase distributedCache, ILogger<ServerRequesterController> logger, IOptions<OperationalConfiguration> configuration, IWebHostEnvironment hostEnvironment) : ControllerBase
+public partial class ServerRequesterController(MerrickContext databaseContext, IDatabase distributedCache, ILogger<ServerRequesterController> logger, IOptions<OperationalConfiguration> configuration, IWebHostEnvironment hostEnvironment, ReplayStorageService replayStorage) : ControllerBase
 {
     private MerrickContext MerrickContext { get; } = databaseContext;
     private IDatabase DistributedCache { get; } = distributedCache;
     private ILogger Logger { get; } = logger;
     private OperationalConfiguration Configuration { get; } = configuration.Value;
     private IWebHostEnvironment HostEnvironment { get; } = hostEnvironment;
+    private ReplayStorageService ReplayStorage { get; } = replayStorage;
 
     [HttpPost(Name = "Server Requester All-In-One")]
     public async Task<IActionResult> ServerRequester() => await HandleServerRequest();
@@ -20,6 +21,7 @@ public partial class ServerRequesterController(MerrickContext databaseContext, I
         {
             // server manager
             "replay_auth"    => await HandleServerManagerAuthentication(),
+            "sm_upload_request" => await HandleReplayUploadAuthorisation(),
 
             // server
             "accept_key"     => await HandleAcceptKey(),
@@ -46,10 +48,11 @@ public partial class ServerRequesterController(MerrickContext databaseContext, I
         return Request.Form["f"].SingleOrDefault() switch
         {
             // server manager
-            "get_spectator_header"  => await HandleGetSpectatorHeader(),
+            "get_spectator_header"  => HandleGetSpectatorHeader(),
+            "sm_upload_request"     => await HandleReplayUploadAuthorisation(),
 
             // server
-            "set_replay_size"       => HandleSetReplaySize(),
+            "set_replay_size"       => await HandleSetReplaySize(),
 
             // default
             _                       => throw new NotImplementedException($"Unsupported Server Requester Controller Form Parameter: f={Request.Form["f"].Single()}")

@@ -118,9 +118,38 @@ public partial class ServerRequesterController
     ///     Updates the replay file size for a completed match.
     ///     Called by the match server after a replay file has been fully written.
     /// </summary>
-    private IActionResult HandleSetReplaySize()
+    private async Task<IActionResult> HandleSetReplaySize()
     {
-        // TODO: Implement Replay Size Tracking
+        if (int.TryParse(Request.Form["match_id"], out int matchID) is false || matchID <= 0
+            || int.TryParse(Request.Form["file_size"], out int fileSize) is false || fileSize <= 0 || fileSize > ReplayStorageSettings.MaximumReplayBytes)
+            return BadRequest("Invalid Replay Size");
+
+        MatchServer? server = await DistributedCache.GetMatchServerBySessionCookie(Request.Form["session"].ToString());
+
+        if (server is null)
+            return Unauthorized();
+
+        MatchStatistics? match = await MerrickContext.MatchStatistics.SingleOrDefaultAsync(match => match.MatchID == matchID);
+
+        if (match is not null)
+        {
+            if (match.HostAccountName != server.HostAccountName || match.ServerID != server.ID)
+                return Unauthorized();
+
+            match.FileSize = fileSize;
+            await MerrickContext.SaveChangesAsync();
+        }
+        else
+        {
+            MatchInformation? information = await DistributedCache.GetMatchInformation(matchID);
+
+            if (information is null || information.ServerID != server.ID)
+                return Unauthorized();
+        }
+
+        // Replay Finalisation May Finish Before The Statistics Transaction Has Created Its Row.
+        await DistributedCache.StringSetAsync(ReplayStorageService.LocalSizeKey(matchID),
+            JsonSerializer.Serialize(new LocalReplaySize(server.HostAccountName, fileSize)), TimeSpan.FromDays(2));
 
         Dictionary<string, object> response = new ()
         {

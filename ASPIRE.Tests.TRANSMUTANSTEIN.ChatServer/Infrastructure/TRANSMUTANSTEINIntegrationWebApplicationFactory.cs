@@ -9,6 +9,8 @@ public sealed class TRANSMUTANSTEINIntegrationWebApplicationFactory(ServiceConta
 {
     protected override void ConfigureEnvironment(IWebHostBuilder builder)
     {
+        builder.UseSetting("Replays:CredentialsFile", string.Empty);
+
         // Production Reads These Via Environment.GetEnvironmentVariable Rather Than IConfiguration, So builder.UseSetting Would Not Reach Them
         Environment.SetEnvironmentVariable("INFRASTRUCTURE_GATEWAY", "localhost");
     }

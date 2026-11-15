@@ -1,6 +1,7 @@
 global using ASPIRE.Common.Constants;
 global using ASPIRE.Common.Enumerations.Match;
 global using ASPIRE.Common.Enumerations.Statistics;
+global using ASPIRE.Common.Extensions.Cryptography;
 global using ASPIRE.Common;
 
 global using ASPIRE.Tests.Infrastructure.Container;
@@ -22,12 +23,15 @@ global using KONGOR.MasterServer.Constants;
 global using KONGOR.MasterServer.Controllers.Announcements;
 global using KONGOR.MasterServer.Controllers.ClientRequester;
 global using KONGOR.MasterServer.Controllers.MessageOfTheDay;
+global using KONGOR.MasterServer.Controllers.Replays;
+global using KONGOR.MasterServer.Controllers.ServerRequester;
 global using KONGOR.MasterServer.Extensions.Cache;
 global using KONGOR.MasterServer.Handlers.SRP;
 global using KONGOR.MasterServer.Helpers.MessageOfTheDay;
 global using KONGOR.MasterServer.Helpers.Stats;
 global using KONGOR.MasterServer.Internals;
 global using KONGOR.MasterServer.Models.Announcements;
+global using KONGOR.MasterServer.Models.Configuration;
 global using KONGOR.MasterServer.Models.MessageOfTheDay;
 global using KONGOR.MasterServer.Models.RequestResponse.Messaging;
 global using KONGOR.MasterServer.Models.RequestResponse.Quest;

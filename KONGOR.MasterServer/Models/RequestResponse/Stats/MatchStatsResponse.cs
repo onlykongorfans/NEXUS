@@ -173,7 +173,7 @@ public class MatchStatsResponse
     public bool Zero => true;
 }
 
-public class MatchSummary(MatchStatistics matchStatistics, List<MatchParticipantStatistics> matchParticipantStatistics, MatchInformation matchInformation)
+public class MatchSummary(MatchStatistics matchStatistics, List<MatchParticipantStatistics> matchParticipantStatistics, MatchInformation matchInformation, string? replayDownloadURL = null)
 {
     /// <summary>
     ///     The unique identifier for the match.
@@ -216,7 +216,7 @@ public class MatchSummary(MatchStatistics matchStatistics, List<MatchParticipant
     ///     This is typically "localhost" in development environments, or "kongor.net" in production environments.
     /// </summary>
     [PHPProperty("file_host")]
-    public string FileHost { get; init; } = Environment.GetEnvironmentVariable("INFRASTRUCTURE_GATEWAY") ?? throw new NullReferenceException("Infrastructure Gateway Is NULL");
+    public string FileHost { get; init; } = replayDownloadURL is not null ? new Uri(replayDownloadURL).Authority : Environment.GetEnvironmentVariable("INFRASTRUCTURE_GATEWAY") ?? throw new NullReferenceException("Infrastructure Gateway Is NULL");
 
     /// <summary>
     ///     The size of the match replay file in bytes.
@@ -228,7 +228,7 @@ public class MatchSummary(MatchStatistics matchStatistics, List<MatchParticipant
     ///     The filename of the match replay file.
     /// </summary>
     [PHPProperty("file_name")]
-    public string FileName { get; init; } = matchStatistics.FileName;
+    public string FileName { get; init; } = replayDownloadURL is not null ? $"M{matchStatistics.MatchID}.honreplay" : matchStatistics.FileName;
 
     /// <summary>
     ///     The connection state or match state code.
@@ -620,7 +620,7 @@ public class MatchSummary(MatchStatistics matchStatistics, List<MatchParticipant
     ///     The URL for the match replay file.
     /// </summary>
     [PHPProperty("url")]
-    public string URL => $"http://{FileHost}/replays/{ServerID}/M{MatchID}.honreplay";
+    public string URL => replayDownloadURL ?? $"http://{FileHost}/replays/{ServerID}/M{MatchID}.honreplay";
 
     /// <summary>
     ///     The size of the match replay file (human-readable format or bytes as string).
@@ -632,13 +632,13 @@ public class MatchSummary(MatchStatistics matchStatistics, List<MatchParticipant
     ///     The directory path where the replay file is stored.
     /// </summary>
     [PHPProperty("dir")]
-    public string Directory => $"/replays/{ServerID}";
+    public string Directory => replayDownloadURL is not null ? new Uri(replayDownloadURL).AbsolutePath[..new Uri(replayDownloadURL).AbsolutePath.LastIndexOf('/')] : $"/replays/{ServerID}";
 
     /// <summary>
     ///     The S3 download URL for the match replay file.
     /// </summary>
     [PHPProperty("s3_url")]
-    public string S3URL => $"http://{FileHost}/replays/{ServerID}/M{MatchID}.honreplay";
+    public string S3URL => URL;
 
     /// <summary>
     ///     The winning team ("1" for Legion, "2" for Hellbourne).

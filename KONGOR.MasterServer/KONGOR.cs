@@ -55,6 +55,12 @@ public class KONGOR
         // Register IDatabase From IConnectionMultiplexer
         builder.Services.AddSingleton<IDatabase>(serviceProvider => serviceProvider.GetRequiredService<IConnectionMultiplexer>().GetDatabase());
 
+        builder.Services.AddSingleton(serviceProvider => ReplayStorageSettings.Load(builder.Configuration["Replays:CredentialsFile"]
+            ?? (builder.Environment.IsProduction() ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "nexus", "replay-storage.json") : null)));
+        builder.Services.AddHttpClient<ReplayStorageService>(httpClient => httpClient.Timeout = TimeSpan.FromMinutes(5))
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false })
+            .ConfigureAdditionalHttpMessageHandlers((handlers, serviceProvider) => handlers.Clear());
+
         // Bind Chat Server Status Settings
         builder.Services.Configure<ChatServerStatusSettings>(builder.Configuration.GetSection(ChatServerStatusSettings.SectionName));
 
@@ -82,6 +88,12 @@ public class KONGOR
                 => context.Connection.RemoteIpAddress.ToRateLimitPartitionKey();
 
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+            options.AddConcurrencyLimiter("ReplayUploads", limiter =>
+            {
+                limiter.PermitLimit = 2;
+                limiter.QueueLimit = 0;
+            });
 
             // Relaxed Limits For General API Endpoints, Independently Accounted Per Verified Client IP Address
             options.AddPolicy(RateLimiterPolicies.Relaxed, context =>
@@ -272,7 +284,14 @@ public class KONGOR
         application.MapDefaultEndpoints();
 
         // Map MVC Controllers With Rate Limiting
-        application.MapControllers().RequireRateLimiting(RateLimiterPolicies.Relaxed);
+        ControllerActionEndpointConventionBuilder controllers = application.MapControllers().RequireRateLimiting(RateLimiterPolicies.Relaxed);
+
+        // Keep The Replay Transfer's Concurrency Limit After The Shared Controller Default.
+        controllers.Add(endpoint =>
+        {
+            if (endpoint.Metadata.OfType<ControllerActionDescriptor>().Any(action => action.ControllerTypeInfo.AsType() == typeof(ReplayUploadController)))
+                endpoint.Metadata.Add(new EnableRateLimitingAttribute("ReplayUploads"));
+        });
         application.MapCustomAccountIconImages();
 
         // Run The Application

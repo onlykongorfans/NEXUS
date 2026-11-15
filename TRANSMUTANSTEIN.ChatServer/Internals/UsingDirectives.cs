@@ -14,6 +14,7 @@ global using KONGOR.MasterServer.Configuration.Matchmaking;
 global using KONGOR.MasterServer.Extensions.Cache;
 global using KONGOR.MasterServer.Models.ServerManagement;
 global using KONGOR.MasterServer.Handlers.SRP;
+global using KONGOR.MasterServer.Services;
 
 global using MERRICK.DatabaseContext.Entities.Core;
 global using MERRICK.DatabaseContext.Entities.Relational;

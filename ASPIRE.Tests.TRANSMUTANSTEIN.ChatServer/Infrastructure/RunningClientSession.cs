@@ -74,6 +74,18 @@ internal sealed class RunningClientSession : IAsyncDisposable
     public async Task<ushort> ReadCommand()
         => BitConverter.ToUInt16(await ReadFrame(), 0);
 
+    public async Task<(int MatchID, byte Status, string URL)> ReadReplayStatus()
+    {
+        ChatBuffer buffer = new (await ReadFrame());
+
+        if (BitConverter.ToUInt16(buffer.ReadCommandBytes()) != ChatProtocol.Command.CHAT_CMD_UPLOAD_STATUS)
+            throw new InvalidDataException("Expected Replay Status");
+
+        int matchID = buffer.ReadInt32();
+        byte status = buffer.ReadInt8();
+        return (matchID, status, status is 3 or 7 ? buffer.ReadString() : string.Empty);
+    }
+
     private async Task<byte[]> ReadFrame()
     {
         using CancellationTokenSource timeout = new (TimeSpan.FromSeconds(5));

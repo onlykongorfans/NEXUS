@@ -110,6 +110,12 @@ public class TRANSMUTANSTEIN
         // Register IDatabase From IConnectionMultiplexer
         builder.Services.AddSingleton<IDatabase>(serviceProvider => serviceProvider.GetRequiredService<IConnectionMultiplexer>().GetDatabase());
 
+        builder.Services.AddSingleton(serviceProvider => ReplayStorageSettings.Load(builder.Configuration["Replays:CredentialsFile"]
+            ?? (builder.Environment.IsProduction() ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "nexus", "replay-storage.json") : null)));
+        builder.Services.AddHttpClient<ReplayStorageService>(httpClient => httpClient.Timeout = TimeSpan.FromMinutes(5))
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false })
+            .ConfigureAdditionalHttpMessageHandlers((handlers, serviceProvider) => handlers.Clear());
+
         // Register Matchmaking Service As Background Hosted Service
         builder.Services.AddHostedService<MatchmakingService>();
 

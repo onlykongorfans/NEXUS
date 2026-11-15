@@ -78,8 +78,7 @@ public partial class ServerRequesterController
             ["chat_port"] = chatServerMatchServerManagerConnectionsPort,
         };
 
-        // These Tell The Server Manager Where To Upload Match Replay Clips After A Game (The Authoritative API Returns The Same Pair From Its Spectate Configuration)
-        // TODO: Decide The Replay Hosting Model: Either Have Each Host Serve Replay Files Directly From Its Own Hosting Machine, Or Upload To The CDN (Which Requires Researching CDN Cost And Granting Server Launchers Write Access); The Current Values Point At The CDN Upload Host As A Placeholder Until This Is Settled
+        // Partial Clip Settings Are Separate From The Authenticated Completed-Replay Upload Grant.
         response["cdn_upload_host"] = Configuration.CDN.Host;
         response["cdn_upload_target"] = "upload";
 

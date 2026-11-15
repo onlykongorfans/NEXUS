@@ -158,12 +158,6 @@ public class MatchServerManagerChatSession(ConnectionContext connection, IServic
             matchServerSession.SendRemoteCommand(command);
     }
 
-    // TODO: Implement On-Demand Replay And Log Uploads Via "NET_CHAT_SM_UPLOAD_REQUEST"
-    // The Server Manager Uploads A Completed Match's Replay Or Log On Request, So That A Client Can Obtain A File Which Is Not Already Available For Download
-    // The Flow Is: A Client Sends "CHAT_CMD_UPLOAD_REQUEST" (Match ID And File Extension), The Chat Server Resolves Which Host Manager Holds That Match, Sends That Manager A "NET_CHAT_SM_UPLOAD_REQUEST", The Manager Uploads And Replies With "NET_CHAT_SM_UPLOAD_UPDATE", And The Chat Server Forwards A "CHAT_CMD_UPLOAD_STATUS" Back To The Client
-    // The "NET_CHAT_SM_UPLOAD_REQUEST" Payload Is The Requesting Account ID, The Match ID, The File Extension, The Destination Host, The Destination Directory, A Flag For FTP Upload, A Flag For S3 Upload, And A Download Link
-    // For The Authoritative Model See "CClient::HandleRequestSMUpload" With "CClientManager::RequestSMUpload" In The HON Chat Server Source, And "UploadRequest" With "UploadRequestResponse" In The Legacy KONGOR Source
-
     /// <summary>
     ///     Tracks whether the cleanup has already run for this session.
     ///     Required because the graceful (<see cref="Terminate"/>), dropped (<see cref="OnDisconnected"/>), and superseded (<see cref="Supersede"/>) paths can all be reached for the same session, and only one of them should take effect.

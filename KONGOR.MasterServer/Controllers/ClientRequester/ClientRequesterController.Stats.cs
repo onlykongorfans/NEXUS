@@ -729,7 +729,28 @@ public partial class ClientRequesterController
         if (matchInformation is null)
             return new NotFoundObjectResult("Match Information Not Found");
 
-        MatchSummary matchSummary = new (matchStatistics, allPlayerStatistics, matchInformation);
+        if (ReplayStorage.Settings.Enabled)
+        {
+            int? storedSize = await ReplayStorage.GetAvailableSize(matchStatistics.MatchID, HttpContext.RequestAborted);
+
+            if (storedSize is null && matchStatistics.FileSize <= 0)
+            {
+                RedisValue pendingSize = await DistributedCache.StringGetAsync(ReplayStorageService.LocalSizeKey(matchStatistics.MatchID));
+                LocalReplaySize? localSize = pendingSize.HasValue ? JsonSerializer.Deserialize<LocalReplaySize>(pendingSize.ToString()) : null;
+
+                if (localSize?.HostAccountName == matchStatistics.HostAccountName)
+                    storedSize = localSize.FileSize;
+            }
+
+            if (storedSize.HasValue && matchStatistics.FileSize != storedSize.Value)
+            {
+                matchStatistics.FileSize = storedSize.Value;
+                await MerrickContext.SaveChangesAsync();
+            }
+        }
+
+        MatchSummary matchSummary = new (matchStatistics, allPlayerStatistics, matchInformation,
+            ReplayStorage.Settings.Enabled ? ReplayStorage.Settings.GetDownloadURL(matchStatistics.MatchID) : null);
 
         List<int> otherPlayerAccountIDs = [.. allPlayerStatistics.Select(statistics => statistics.AccountID).Where(id => id != account.ID)];
 

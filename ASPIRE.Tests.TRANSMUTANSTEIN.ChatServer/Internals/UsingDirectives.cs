@@ -12,10 +12,12 @@ global using ASPIRE.Tests.TRANSMUTANSTEIN.ChatServer.Utilities.Matchmaking;
 global using KONGOR.MasterServer.Extensions.Cache;
 global using KONGOR.MasterServer.Handlers.SRP;
 global using KONGOR.MasterServer.Models.ServerManagement;
+global using KONGOR.MasterServer.Services;
 
 global using MERRICK.DatabaseContext.Constants;
 global using MERRICK.DatabaseContext.Entities.Core;
 global using MERRICK.DatabaseContext.Entities.Relational;
+global using MERRICK.DatabaseContext.Entities.Statistics;
 global using MERRICK.DatabaseContext.Entities.Utility;
 global using MERRICK.DatabaseContext.Enumerations;
 global using MERRICK.DatabaseContext.Persistence;
@@ -43,6 +45,7 @@ global using System.Net;
 global using System.Runtime.CompilerServices;
 
 global using TRANSMUTANSTEIN.ChatServer.CommandProcessors.Channels;
+global using TRANSMUTANSTEIN.ChatServer.CommandProcessors.Connection;
 global using TRANSMUTANSTEIN.ChatServer.Configuration;
 global using TRANSMUTANSTEIN.ChatServer.Domain.Communication;
 global using TRANSMUTANSTEIN.ChatServer.Domain.Core;

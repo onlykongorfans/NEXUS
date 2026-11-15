@@ -20,6 +20,23 @@ public sealed class MatchSummaryTests_Unit
     }
 
     [Test]
+    public async Task Configured_Replay_Uses_The_Public_Flat_Download_Path()
+    {
+        MatchInformation information = MatchDataHelper.BuildMatchInformation(MatchType.AM_PUBLIC);
+        MatchStatistics statistics = MatchDataHelper.BuildMatchStatistics();
+        statistics.MatchID = 123;
+        statistics.FileSize = 2048;
+        MatchSummary summary = new (statistics, [MatchDataHelper.BuildParticipant(1, "ReplayPlayer", -1, matchID: 123)], information, "http://files.test/replays/M123.honreplay");
+
+        await Assert.That(summary.URL).IsEqualTo("http://files.test/replays/M123.honreplay");
+        await Assert.That(summary.S3URL).IsEqualTo(summary.URL);
+        await Assert.That(summary.FileHost).IsEqualTo("files.test");
+        await Assert.That(summary.FileName).IsEqualTo("M123.honreplay");
+        await Assert.That(summary.Directory).IsEqualTo("/replays");
+        await Assert.That(summary.Size).IsEqualTo(2048);
+    }
+
+    [Test]
     public async Task Winning_Team_Is_Zero_When_No_Participant_Has_A_Win()
     {
         MatchInformation matchInformation = MatchDataHelper.BuildMatchInformation(MatchType.AM_PUBLIC);

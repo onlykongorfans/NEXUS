@@ -9,6 +9,8 @@ public sealed class KONGORIntegrationWebApplicationFactory(ServiceContainerConte
 {
     protected override void ConfigureEnvironment(IWebHostBuilder builder)
     {
+        builder.UseSetting("Replays:CredentialsFile", string.Empty);
+
         // Production Reads These Via Environment.GetEnvironmentVariable Rather Than IConfiguration, So builder.UseSetting Would Not Reach Them.
         Environment.SetEnvironmentVariable("CHAT_SERVER_HOST", "internal-chat.test");
         Environment.SetEnvironmentVariable("CHAT_SERVER_CLIENT_HOST", "public-chat.test");
