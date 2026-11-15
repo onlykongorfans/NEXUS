@@ -125,6 +125,9 @@ public class TRANSMUTANSTEIN
         // Register Account Logout Subscriber Service That Consumes Force-Logout Signals Published By The Master Server
         builder.Services.AddHostedService<LogoutMonitor>();
 
+        // Share A Short-Lived Population Snapshot With The Master Server.
+        builder.Services.AddHostedService<OnlinePlayerCountPublisher>();
+
         // Register The Stale Host Reaper That Removes Cached Match Servers And Managers With No Live Chat Session
         builder.Services.AddHostedService<StaleHostReaper>();
 

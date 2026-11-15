@@ -87,6 +87,10 @@ public class KONGOR
             static string ClientPartitionKey(HttpContext context)
                 => context.Connection.RemoteIpAddress.ToRateLimitPartitionKey();
 
+            static bool IsPopulationRequest(HttpContext context)
+                => context.Request.Path.Equals("/client_requester.php", StringComparison.OrdinalIgnoreCase)
+                    && context.Request.Query["f"] is { Count: 1 } function && function[0] == "get_online_player_count";
+
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
             options.AddConcurrencyLimiter("ReplayUploads", limiter =>
@@ -97,9 +101,9 @@ public class KONGOR
 
             // Relaxed Limits For General API Endpoints, Independently Accounted Per Verified Client IP Address
             options.AddPolicy(RateLimiterPolicies.Relaxed, context =>
-                RateLimitPartition.GetSlidingWindowLimiter(ClientPartitionKey(context), _ => new SlidingWindowRateLimiterOptions
+                RateLimitPartition.GetSlidingWindowLimiter(IsPopulationRequest(context) ? $"population:{ClientPartitionKey(context)}" : ClientPartitionKey(context), _ => new SlidingWindowRateLimiterOptions
                 {
-                    PermitLimit = 100,
+                    PermitLimit = IsPopulationRequest(context) ? 600 : 100,
                     Window = TimeSpan.FromMinutes(1),
                     SegmentsPerWindow = 6, // 10 Seconds Per Sliding Window Segment
                     QueueLimit = 10,

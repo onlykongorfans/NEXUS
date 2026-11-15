@@ -121,6 +121,9 @@ public partial class ClientRequesterController(MerrickContext databaseContext, I
             // servers
             "server_list"                   => await GetServerList(),
 
+            // population
+            "get_online_player_count"       => await GetOnlinePlayerCount(),
+
             // friends
             "remove_buddy2"                 => await RemoveFriend(),
 
@@ -161,6 +164,9 @@ public partial class ClientRequesterController(MerrickContext databaseContext, I
             "get_campaign_hero_stats"       => await GetCampaignHeroStatistics(),
             "get_hero_usage_list"           => await GetHeroUsageList(),
             "grab_last_matches_from_nick"   => await GetLastMatchesFromNickname(),
+
+            // population
+            "get_online_player_count"       => await GetOnlinePlayerCount(),
 
             // store
             "get_daily_special"             => await GetDailySpecial(),
