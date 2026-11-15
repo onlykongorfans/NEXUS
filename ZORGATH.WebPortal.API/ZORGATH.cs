@@ -1,4 +1,4 @@
-﻿namespace ZORGATH.WebPortal.API;
+namespace ZORGATH.WebPortal.API;
 
 public class ZORGATH
 {
@@ -49,6 +49,9 @@ public class ZORGATH
             // Add Interceptors
             options.AddMerrickInterceptors();
         });
+
+        builder.AddRedisClient("DISTRIBUTED-CACHE");
+        builder.Services.AddSingleton<IDatabase>(serviceProvider => serviceProvider.GetRequiredService<IConnectionMultiplexer>().GetDatabase());
 
         // Add Memory Cache Service
         builder.Services.AddMemoryCache();

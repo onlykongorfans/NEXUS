@@ -1,4 +1,4 @@
-﻿global using ASPIRE.Common.Constants;
+global using ASPIRE.Common.Constants;
 global using ASPIRE.Common.Extensions.Logging;
 global using ASPIRE.Common.Extensions.Networking;
 global using ASPIRE.Common.Extensions.Services;
@@ -63,3 +63,12 @@ global using ZORGATH.WebPortal.API.Models.Configuration;
 global using ZORGATH.WebPortal.API.Services;
 global using ZORGATH.WebPortal.API.Services.Email;
 global using ZORGATH.WebPortal.API.Validators;
+
+global using Ganss.Xss;
+global using KONGOR.MasterServer.Extensions.Cache;
+global using KONGOR.MasterServer.Helpers.MessageOfTheDay;
+global using KONGOR.MasterServer.Models.Announcements;
+global using KONGOR.MasterServer.Models.MessageOfTheDay;
+global using StackExchange.Redis;
+
+global using Role = MERRICK.DatabaseContext.Entities.Utility.Role;

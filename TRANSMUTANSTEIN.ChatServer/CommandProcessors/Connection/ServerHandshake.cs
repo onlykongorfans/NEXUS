@@ -140,8 +140,6 @@ public class ServerHandshake(IDatabase distributedCacheStore, MerrickContext dat
         // Broadcast Updated Server Counts Per Region To Terminal
         Terminal.Broadcast(@$"Match Server {requestData.ServerID} Registered In Region ""{GameRegions.NormaliseServerLocation(server.Location)}""", Terminal.ServersPerRegion());
 
-        string uniqueServerName = Random.Shared.Next().ToString("X8"); // TODO: Use The Original Name As Identifier, To Verify Server Binaries Checksum
-
         MatchServerSettings settings = matchServerSettings.Value;
 
         List<string> remoteCommands =
@@ -152,10 +150,7 @@ public class ServerHandshake(IDatabase distributedCacheStore, MerrickContext dat
             // Match Statistics Submission
             $"svr_submitMatchStatItems {BooleanToString(settings.SubmitMatchStatisticsItems)}",
             $"svr_submitMatchStatAbilities {BooleanToString(settings.SubmitMatchStatisticsAbilities)}",
-            $"svr_submitMatchStatFrags {BooleanToString(settings.SubmitMatchStatisticsFrags)}",
-
-            // Server Identity
-            $"svr_name {uniqueServerName}"
+            $"svr_submitMatchStatFrags {BooleanToString(settings.SubmitMatchStatisticsFrags)}"
         ];
 
         // Maximum Outgoing Bandwidth Per Client (0 Uses Game Server Default)
@@ -173,11 +168,6 @@ public class ServerHandshake(IDatabase distributedCacheStore, MerrickContext dat
         session
             .SetOnline()
             .SendOptions(remoteCommands);
-
-        server.Name = uniqueServerName;
-
-        // Update The Match Server Name In The Distributed Cache
-        await distributedCacheStore.SetMatchServer(server.HostAccountName, server);
     }
 
     /// <summary>

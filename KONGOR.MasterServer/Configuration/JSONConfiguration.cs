@@ -1,4 +1,4 @@
-﻿namespace KONGOR.MasterServer.Configuration;
+namespace KONGOR.MasterServer.Configuration;
 
 public static class JSONConfiguration
 {
@@ -17,6 +17,8 @@ public static class JSONConfiguration
     private static readonly string DailySpecialsConfigurationJSON = File.ReadAllText(Path.Combine(BasePath, "Store", "DailySpecialsConfiguration.json"));
 
     private static readonly string FeaturedItemsConfigurationJSON = File.ReadAllText(Path.Combine(BasePath, "Store", "FeaturedItemsConfiguration.json"));
+
+    private static readonly string MessageOfTheDayConfigurationJSON = File.ReadAllText(Path.Combine(BasePath, "MessageOfTheDay", "MessageOfTheDayConfiguration.json"));
 
     private static readonly string AnnouncementsConfigurationJSON = File.ReadAllText(Path.Combine(BasePath, "Announcements", "AnnouncementsConfiguration.json"));
 
@@ -46,6 +48,9 @@ public static class JSONConfiguration
 
     public static readonly FeaturedItemsConfiguration FeaturedItemsConfiguration = JsonSerializer.Deserialize<FeaturedItemsConfiguration>(FeaturedItemsConfigurationJSON)
         ?? throw new NullReferenceException("Featured Items Configuration Is NULL");
+
+    public static readonly MessageOfTheDayConfiguration MessageOfTheDayConfiguration = JsonSerializer.Deserialize<MessageOfTheDayConfiguration>(MessageOfTheDayConfigurationJSON)
+        ?? throw new NullReferenceException("Message Of The Day Configuration Is NULL");
 
     public static readonly AnnouncementsConfiguration AnnouncementsConfiguration = JsonSerializer.Deserialize<AnnouncementsConfiguration>(AnnouncementsConfigurationJSON)
         ?? throw new NullReferenceException("Announcements Configuration Is NULL");

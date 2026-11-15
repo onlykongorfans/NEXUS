@@ -715,7 +715,7 @@ public class MatchmakingGroup
 
         // Remove Member From Group
         lock (MembershipLock)
-            Members.Remove(memberToRemove);
+            Members = [.. Members.Where(member => member.Account.ID != accountID)];
 
         // Dispose The Group Chat Channel When The Group Drops To One Or Fewer Members
         if (Members.Count <= 1 && ChatChannel is not null)

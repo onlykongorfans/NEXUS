@@ -39,15 +39,18 @@ public sealed class InMemoryChatConnectionTests
     }
 
     [Test]
-    public async Task Frame_Split_Across_Two_Writes_Is_Reassembled()
+    [Arguments(1)]
+    [Arguments(2)]
+    [Arguments(3)]
+    public async Task Frame_Split_Across_Two_Writes_Is_Reassembled(int splitOffset)
     {
         await using InMemoryChatConnection connection = InMemoryChatConnection.Start();
 
         byte[] pingFrame = InMemoryChatConnection.Frame(CommandPayload(ChatProtocol.Bidirectional.NET_CHAT_PING));
 
-        // Deliver The Length Prefix Split From Its Payload So The Reader Must Reassemble Across Reads
-        await connection.WriteBytes(pingFrame[..1]);
-        await connection.WriteBytes(pingFrame[1..]);
+        // Split Within The Length Prefix, At The Payload Boundary, Or Within The Command
+        await connection.WriteBytes(pingFrame[..splitOffset]);
+        await connection.WriteBytes(pingFrame[splitOffset..]);
 
         byte[] response = await connection.ReadFrame();
 
@@ -70,6 +73,49 @@ public sealed class InMemoryChatConnectionTests
     }
 
     [Test]
+    [Arguments(0)]
+    [Arguments(1)]
+    public async Task Short_Frame_Closes_The_Session_With_A_Warning_And_No_Error(int payloadLength)
+    {
+        await using InMemoryChatConnection connection = InMemoryChatConnection.Start();
+
+        await connection.WriteFrame(new byte[payloadLength]);
+
+        await connection.WaitForCompletion();
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(connection.LogEvents.Count(logEvent => logEvent.Level is LogEventLevel.Warning)).IsEqualTo(1);
+            await Assert.That(connection.LogEvents.Count(logEvent => logEvent.Level >= LogEventLevel.Error)).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    [Arguments(0)]
+    [Arguments(1)]
+    public async Task Short_Frame_Preserves_A_Queued_Response_And_Stops_Later_Commands(int payloadLength)
+    {
+        await using InMemoryChatConnection connection = InMemoryChatConnection.Start();
+
+        byte[] pingFrame = InMemoryChatConnection.Frame(CommandPayload(ChatProtocol.Bidirectional.NET_CHAT_PING));
+        byte[] shortFrame = InMemoryChatConnection.Frame(new byte[payloadLength]);
+
+        await connection.WriteBytes([.. pingFrame, .. shortFrame, .. pingFrame]);
+
+        await connection.WaitForCompletion();
+
+        byte[] response = await connection.ReadFrame();
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(BitConverter.ToUInt16(response, 0)).IsEqualTo((ushort) ChatProtocol.Bidirectional.NET_CHAT_PONG);
+            await Assert.That(connection.HasCompletedOutput).IsTrue();
+            await Assert.That(connection.LogEvents.Count(logEvent => logEvent.Level is LogEventLevel.Warning)).IsEqualTo(1);
+            await Assert.That(connection.LogEvents.Count(logEvent => logEvent.Level >= LogEventLevel.Error)).IsEqualTo(0);
+        }
+    }
+
+    [Test]
     public async Task Completing_The_Input_Ends_The_Session_Cleanly()
     {
         await using InMemoryChatConnection connection = InMemoryChatConnection.Start();
@@ -89,6 +135,23 @@ public sealed class InMemoryChatConnectionTests
 /// </summary>
 file sealed class InMemoryChatConnection : IAsyncDisposable
 {
+    public List<LogEvent> LogEvents { get; }
+
+    public bool HasCompletedOutput
+    {
+        get
+        {
+            if (Outbound.Reader.TryRead(out ReadResult result) is false)
+                return false;
+
+            bool completed = result.IsCompleted && result.Buffer.IsEmpty;
+
+            Outbound.Reader.AdvanceTo(result.Buffer.Start, result.Buffer.End);
+
+            return completed;
+        }
+    }
+
     private WebApplication Host { get; }
 
     private Pipe Inbound { get; }
@@ -97,12 +160,13 @@ file sealed class InMemoryChatConnection : IAsyncDisposable
 
     private Task SessionTask { get; }
 
-    private InMemoryChatConnection(WebApplication host, Pipe inbound, Pipe outbound, Task sessionTask)
+    private InMemoryChatConnection(WebApplication host, Pipe inbound, Pipe outbound, Task sessionTask, List<LogEvent> logEvents)
     {
         Host = host;
         Inbound = inbound;
         Outbound = outbound;
         SessionTask = sessionTask;
+        LogEvents = logEvents;
     }
 
     public static InMemoryChatConnection Start()
@@ -120,9 +184,15 @@ file sealed class InMemoryChatConnection : IAsyncDisposable
             Transport = new InMemoryDuplexPipe(inbound.Reader, outbound.Writer)
         };
 
-        Task sessionTask = new ClientChatSession(connection, host.Services).RunAsync();
+        List<LogEvent> logEvents = [];
 
-        return new InMemoryChatConnection(host, inbound, outbound, sessionTask);
+        Serilog.ILogger logger = new Serilog.LoggerConfiguration()
+            .WriteTo.Sink(new InMemoryChatLogSink(logEvents))
+            .CreateLogger();
+
+        Task sessionTask = new InMemoryClientChatSession(connection, host.Services, logger).RunAsync();
+
+        return new InMemoryChatConnection(host, inbound, outbound, sessionTask, logEvents);
     }
 
     public static byte[] Frame(byte[] payload)
@@ -184,6 +254,21 @@ file sealed class InMemoryChatConnection : IAsyncDisposable
 
         await Host.DisposeAsync();
     }
+}
+
+file sealed class InMemoryClientChatSession(ConnectionContext connection, IServiceProvider serviceProvider, Serilog.ILogger logger) : ClientChatSession(connection, serviceProvider)
+{
+    protected override void OnConnected()
+    {
+        base.OnConnected();
+
+        Logger = logger.ForContext("SessionID", ID);
+    }
+}
+
+file sealed class InMemoryChatLogSink(List<LogEvent> logEvents) : ILogEventSink
+{
+    public void Emit(LogEvent logEvent) => logEvents.Add(logEvent);
 }
 
 file sealed class InMemoryDuplexPipe(PipeReader input, PipeWriter output) : IDuplexPipe

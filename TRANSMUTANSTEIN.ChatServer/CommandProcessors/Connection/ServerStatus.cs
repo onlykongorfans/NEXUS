@@ -28,6 +28,9 @@ public class ServerStatus(IDatabase distributedCacheStore) : IAsynchronousComman
         // Update Session Status
         session.UpdateStatus(requestData.Status);
 
+        // Keep The Advertised Name In Sync With The Server's Own Configuration
+        matchServer.Name = requestData.Name;
+
         // Update Match Server Status
         matchServer.Status = requestData.Status;
 
@@ -48,6 +51,17 @@ public class ServerStatus(IDatabase distributedCacheStore) : IAsynchronousComman
             await session.Terminate(distributedCacheStore);
 
             return;
+        }
+
+        string instanceSuffix = $" {matchServer.Instance.ToString(CultureInfo.InvariantCulture)}";
+        string serverName = requestData.Name.Trim();
+
+        // Preserve An Existing Instance Suffix So Repeated Heartbeats Do Not Append It Again
+        if (serverName.Length > 0
+            && serverName.EndsWith(instanceSuffix, StringComparison.Ordinal) is false
+            && serverName.Any(character => char.IsControl(character) || character is '"' or ';' or '\\') is false)
+        {
+            session.SendRemoteCommand($"svr_name \"{serverName}{instanceSuffix}\"");
         }
 
         // Broadcast The Status Update To The Terminal

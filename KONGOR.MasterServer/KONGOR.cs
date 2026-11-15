@@ -1,4 +1,4 @@
-﻿namespace KONGOR.MasterServer;
+namespace KONGOR.MasterServer;
 
 public class KONGOR
 {
@@ -120,6 +120,8 @@ public class KONGOR
         builder.Services.AddHostedService<TokenCleanupService>();
 
         // Add MVC Controllers Support
+        builder.Services.AddMemoryCache();
+
         builder.Services.AddControllers();
         builder.Services.Configure<CustomAccountIconConfiguration>(builder.Configuration.GetSection(CustomAccountIconConfiguration.SectionName));
 
@@ -226,6 +228,12 @@ public class KONGOR
                 RequestPath = "/swagger"
             });
         }
+
+        application.UseStaticFiles(new StaticFileOptions
+        {
+            FileProvider = new PhysicalFileProvider(Path.Combine(AppContext.BaseDirectory, "Resources", "Fonts")),
+            RequestPath = "/fonts"
+        });
 
         // Enable Rate Limiting (Before Other Processing)
         application.UseRateLimiter();

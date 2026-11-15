@@ -237,14 +237,15 @@ public partial class ServerRequesterController
                     Location = serverLocation,
                     Description = serverDescription
                 };
-
-                await DistributedCache.SetMatchServer(hostAccountName, matchServer);
             }
 
             else
             {
                 matchServer = existingMatchServer;
+                matchServer.Name = serverName;
             }
+
+            await DistributedCache.SetMatchServer(hostAccountName, matchServer);
 
             if (matchServerManager is not null && matchServerManager.MatchServerIDs.Contains(matchServer.ID) is false)
             {
@@ -254,7 +255,6 @@ public partial class ServerRequesterController
             }
 
             // TODO: Implement Verifier In Description (If The Server Is A COMPEL Server, It Will Have A Verifier In The Description)
-            // INFO: The Server Manager Doesn't Send Descriptions, So Use Name Instead Since We Can Override Them Anyway Via Remote Command (svr_name) On TCP Handshake
 
             string chatServerHost = Environment.GetEnvironmentVariable("CHAT_SERVER_HOST")
                 ?? throw new NullReferenceException("Chat Server Host Is NULL");

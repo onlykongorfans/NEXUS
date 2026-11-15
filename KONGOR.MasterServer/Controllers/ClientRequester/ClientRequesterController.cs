@@ -106,7 +106,7 @@ public partial class ClientRequesterController(MerrickContext databaseContext, I
             "take_mastery_reward"           => await TakeMasteryReward(),
             "boost_match_mastery"           => await BoostMatchMastery(),
             "client_events_info"            => GetClientEventsInformation(),
-            "get_special_messages"          => GetSpecialMessages(),
+            "get_special_messages"          => await GetSpecialMessages(),
             "claim_season_rewards"          => ClaimSeasonRewards(),
             "get_products"                  => GetProducts(),
             "get_upgrades"                  => await GetUpgrades(),
@@ -199,7 +199,45 @@ public partial class ClientRequesterController(MerrickContext databaseContext, I
     ///     in an iframe that the client's embedded web browser can render.
     ///     The client generates an MD5 hash from the title, URL, and date to track which messages have already been seen.
     /// </summary>
-    private IActionResult GetSpecialMessages()
+    public const string SpecialMessagesListDate = "2026-11-02";
+
+    /// <summary>
+    ///     Returns the announcements to list on the client's Project KONGOR Announcement Board: every published, unexpired announcement in the distributed cache, newest first.
+    ///     Each message's address points at the master server's announcement page, by the announcement's identity and with its published time.
+    /// </summary>
+    private async Task<IActionResult> GetSpecialMessages()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        string baseURL = $"{Request.Scheme}://{Request.Host}";
+
+        List<Announcement> announcements = [.. (await DistributedCache.GetAnnouncements())
+            .Where(announcement => announcement.Published <= now && announcement.Expires > now)
+            .OrderByDescending(announcement => announcement.Published)];
+
+        if (announcements.Count is 0)
+            return GetConfiguredSpecialMessages();
+
+        List<Dictionary<string, object>> messages = [.. announcements.Select((announcement, index) => new Dictionary<string, object>
+        {
+            ["message_id"] = index + 1,
+            ["title"]      = announcement.Title,
+            ["url"]        = $"{baseURL}/announcements/{announcement.ID}?published={announcement.Published.ToUnixTimeSeconds()}",
+            ["start_time"] = announcement.Published.UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            ["end_time"]   = announcement.Expires.UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            ["left_secs"]  = (int) (announcement.Expires - now).TotalSeconds
+        })];
+
+        Dictionary<string, object> response = new ()
+        {
+            ["date"] = SpecialMessagesListDate,
+            ["messages"] = messages,
+            ["vested_threshold"] = 5
+        };
+
+        return Ok(PhpSerialization.Serialize(response));
+    }
+
+    private IActionResult GetConfiguredSpecialMessages()
     {
         string date = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd");
         string baseURL = $"{Request.Scheme}://{Request.Host}";

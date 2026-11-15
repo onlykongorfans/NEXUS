@@ -43,6 +43,7 @@ global using System.Buffers;
 global using System.Collections.Concurrent;
 global using System.Diagnostics;
 global using System.Diagnostics.CodeAnalysis;
+global using System.Globalization;
 global using System.IO.Pipelines;
 global using System.Net;
 global using System.Net.Sockets;
@@ -67,3 +68,5 @@ global using TRANSMUTANSTEIN.ChatServer.Extensions.Protocol;
 global using TRANSMUTANSTEIN.ChatServer.Internals;
 global using TRANSMUTANSTEIN.ChatServer.Services;
 global using TRANSMUTANSTEIN.ChatServer.Utilities;
+
+global using System.Text.Json;

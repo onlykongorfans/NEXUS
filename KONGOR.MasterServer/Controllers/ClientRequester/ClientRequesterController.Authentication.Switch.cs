@@ -97,7 +97,7 @@ public partial class ClientRequesterController
         // Store The Replacement Before Invalidating The Existing Cookie So A Cache Failure Cannot Leave The Client Without Any Valid Session
         await DistributedCache.SetAccountNameForSessionCookie(replacementCookie, targetAccount.Name);
         await DistributedCache.RemoveAccountNameForSessionCookie(cookie);
-        await DistributedCache.PublishAccountLogout(authenticatedAccount.Name);
+        await DistributedCache.PublishAccountLogout(new AccountLogout { AccountName = authenticatedAccount.Name, SessionCookie = cookie });
 
         Logger.LogInformation("Account {AccountName} (ID: {AccountID}) Switched To Account {TargetAccountName} (ID: {TargetAccountID})",
             authenticatedAccount.Name, authenticatedAccount.ID, targetAccount.Name, targetAccount.ID);

@@ -264,7 +264,7 @@ public sealed class HostingAuthenticationTests(KONGORIntegrationWebApplicationFa
     }
 
     [Test]
-    public async Task Explicit_Instance_Reauthentication_Preserves_Existing_Server_Metadata()
+    public async Task Explicit_Instance_Reauthentication_Refreshes_Name_And_Preserves_Other_Server_Metadata()
     {
         await InitialiseIn("Development");
 
@@ -300,7 +300,7 @@ public sealed class HostingAuthenticationTests(KONGORIntegrationWebApplicationFa
         HttpResponseMessage secondResponse = await AuthenticateServer(
             $"{DedicatedHostAccountName}:2",
             11236,
-            serverName: "NEXUS AU",
+            serverName: "NEXUS AU 2",
             serverLocation: "EU");
 
         await Assert.That(secondResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
@@ -314,11 +314,35 @@ public sealed class HostingAuthenticationTests(KONGORIntegrationWebApplicationFa
         {
             await Assert.That(secondServerID).IsEqualTo(firstServerID);
             await Assert.That(secondSessionCookie).IsEqualTo(firstSessionCookie);
-            await Assert.That(preservedMatchServer.Name).IsEqualTo(existingDisplayName);
+            await Assert.That(preservedMatchServer.Name).IsEqualTo("NEXUS AU 2");
             await Assert.That(preservedMatchServer.Location).IsEqualTo(existingLocation);
             await Assert.That(preservedMatchServer.TimestampRegistered).IsEqualTo(existingRegistrationTimestamp);
             await Assert.That(preservedMatchServer.Status).IsEqualTo(existingStatus);
         }
+    }
+
+    [Test]
+    [Arguments("NEXUS AU 1", 1)]
+    [Arguments("NEXUS AU 2", 2)]
+    [Arguments("NEXUS2 AU 1", 1)]
+    public async Task Initial_Server_Registration_Preserves_The_Advertised_Name(string serverName, int instance)
+    {
+        await InitialiseIn("Development");
+
+        await AuthenticateManager(DedicatedHostAccountName);
+
+        HttpResponseMessage response = await AuthenticateServer($"{DedicatedHostAccountName}:{instance}", 11234 + instance, serverName: serverName);
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        (int serverID, string _) = await DeserialiseServerAuthenticationResponse(response);
+
+        IDatabase distributedCacheStore = webApplicationFactory.Services.GetRequiredService<IDatabase>();
+
+        MatchServer server = await distributedCacheStore.GetMatchServerByID(serverID)
+            ?? throw new NullReferenceException("Registered Match Server Is NULL");
+
+        await Assert.That(server.Name).IsEqualTo(serverName);
     }
 
     private async Task InitialiseIn(string environment)

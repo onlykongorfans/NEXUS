@@ -155,10 +155,10 @@ public sealed class MerrickContext : DbContext
 
     private static void ConfigureAccountStatistics(EntityTypeBuilder<AccountStatistics> builder)
     {
-        builder.OwnsOne(statistics => statistics.HeroStatistics, ownedNavigationBuilder =>
+        builder.ComplexProperty(statistics => statistics.HeroStatistics, complexPropertyBuilder =>
         {
-            ownedNavigationBuilder.ToJson();
-            ownedNavigationBuilder.OwnsMany(summary => summary.Heroes);
+            complexPropertyBuilder.ToJson();
+            complexPropertyBuilder.ComplexCollection(summary => summary.Heroes);
         });
 
         builder.OwnsOne(statistics => statistics.AwardStatistics, ownedNavigationBuilder =>
@@ -177,7 +177,7 @@ public sealed class MerrickContext : DbContext
                 collection => collection.Aggregate(0, (accumulatedHashCode, value) => HashCode.Combine(accumulatedHashCode, value.GetHashCode())), collection => collection.ToList())
         );
 
-        builder.OwnsMany(statistics => statistics.ItemHistory, ownedNavigationBuilder => ownedNavigationBuilder.ToJson());
+        builder.ComplexCollection(statistics => statistics.ItemHistory, complexPropertyBuilder => complexPropertyBuilder.ToJson());
         builder.OwnsMany(statistics => statistics.AbilityHistory, ownedNavigationBuilder => ownedNavigationBuilder.ToJson());
         builder.OwnsOne(statistics => statistics.MasteryProgression, ownedNavigationBuilder => ownedNavigationBuilder.ToJson());
     }

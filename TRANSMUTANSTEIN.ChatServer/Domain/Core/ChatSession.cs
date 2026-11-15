@@ -199,6 +199,15 @@ public class ChatSession(ConnectionContext connection, IServiceProvider serviceP
 
     private async Task ProcessDataSegment(byte[] segment)
     {
+        if (segment.Length < sizeof(ushort))
+        {
+            Logger.Warning("Rejected Chat Frame With Payload Length {PayloadLength}; A Command Requires At Least {MinimumPayloadLength} Bytes", segment.Length, sizeof(ushort));
+
+            await CloseGracefully();
+
+            return;
+        }
+
         ushort command = BitConverter.ToUInt16([segment[0], segment[1]]);
 
         LastProcessedCommand = command;

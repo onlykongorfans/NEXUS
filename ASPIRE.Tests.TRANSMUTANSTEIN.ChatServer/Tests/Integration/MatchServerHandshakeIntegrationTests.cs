@@ -9,7 +9,199 @@ namespace ASPIRE.Tests.TRANSMUTANSTEIN.ChatServer.Tests.Integration;
 public sealed class MatchServerHandshakeIntegrationTests(ServiceContainerContext containerContext)
 {
     [Test]
-    public async Task Valid_Server_Handshake_Is_Accepted()
+    [Arguments("NEXUS AU 1")]
+    [Arguments("NEXUS AU 2")]
+    [Arguments("NEXUS2 AU 1")]
+    public async Task Valid_Server_Handshake_Preserves_The_Advertised_Name_And_Sends_Configuration(string serverName)
+    {
+        await using ChatServerHost host = await ChatServerHost.StartAsync(containerContext);
+
+        (int hostAccountID, string hostAccountName) = await ChatTestData.SeedAccount(host.Services, AccountType.ServerHost);
+
+        int serverID = Random.Shared.Next(100_000, 999_999);
+        string cookie = Guid.CreateVersion7().ToString();
+
+        await ChatTestData.SeedMatchServer(host.Services, serverID, hostAccountID, hostAccountName, cookie);
+
+        IDatabase distributedCacheStore = host.Services.GetRequiredService<IDatabase>();
+
+        MatchServer server = await distributedCacheStore.GetMatchServerByID(serverID)
+            ?? throw new NullReferenceException("Seeded Match Server Is NULL");
+
+        server.Name = serverName;
+
+        await distributedCacheStore.SetMatchServer(hostAccountName, server);
+
+        using TcpClient client = await host.ConnectMatchServerAsync();
+
+        NetworkStream stream = client.GetStream();
+
+        await ChatTestProtocol.WriteFrame(stream, ChatTestProtocol.BuildServerHandshake(serverID, cookie));
+
+        using CancellationTokenSource timeout = new (TimeSpan.FromSeconds(10));
+
+        ushort command = await ChatTestProtocol.ReadCommand(stream, timeout.Token);
+
+        await Assert.That(command).IsEqualTo((ushort) ChatProtocol.ChatServerToGameServer.NET_CHAT_GS_ACCEPT);
+
+        List<string> remoteCommands = [];
+        bool optionsReceived = false;
+
+        while (true)
+        {
+            ChatBuffer frame = new (await ChatTestProtocol.ReadFramePayload(stream, timeout.Token));
+            ushort frameCommand = BitConverter.ToUInt16(frame.ReadCommandBytes(), 0);
+
+            if (frameCommand == ChatProtocol.ChatServerToGameServer.NET_CHAT_GS_OPTIONS)
+                optionsReceived = true;
+
+            if (frameCommand != ChatProtocol.ChatServerToGameServer.NET_CHAT_GS_REMOTE_COMMAND)
+                continue;
+
+            frame.ReadString();
+
+            string remoteCommand = frame.ReadString();
+
+            remoteCommands.Add(remoteCommand);
+
+            if (remoteCommand == "echo Project KONGOR Remote Configuration Was Injected Successfully")
+                break;
+        }
+
+        MatchServer preservedServer = await distributedCacheStore.GetMatchServerByID(serverID)
+            ?? throw new NullReferenceException("Registered Match Server Is NULL");
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(optionsReceived).IsTrue();
+            await Assert.That(remoteCommands.Any(remoteCommand => remoteCommand.StartsWith("svr_gameFPS ", StringComparison.Ordinal))).IsTrue();
+            await Assert.That(remoteCommands.Any(remoteCommand => remoteCommand.StartsWith("svr_submitMatchStatItems ", StringComparison.Ordinal))).IsTrue();
+            await Assert.That(remoteCommands.Any(remoteCommand => remoteCommand.StartsWith("svr_name", StringComparison.OrdinalIgnoreCase))).IsFalse();
+            await Assert.That(preservedServer.Name).IsEqualTo(serverName);
+            await Assert.That(preservedServer.Cookie).IsEqualTo(cookie);
+        }
+    }
+
+    [Test]
+    public async Task A_Status_Update_Replaces_A_Cached_Random_Name_With_The_Advertised_Name()
+    {
+        await using ChatServerHost host = await ChatServerHost.StartAsync(containerContext);
+
+        (int hostAccountID, string hostAccountName) = await ChatTestData.SeedAccount(host.Services, AccountType.ServerHost);
+
+        int serverID = Random.Shared.Next(100_000, 999_999);
+        string cookie = Guid.CreateVersion7().ToString();
+        string serverName = "NEXUS AU 1";
+
+        await ChatTestData.SeedMatchServer(host.Services, serverID, hostAccountID, hostAccountName, cookie);
+
+        using TcpClient client = await host.ConnectMatchServerAsync();
+
+        NetworkStream stream = client.GetStream();
+
+        await ChatTestProtocol.WriteFrame(stream, ChatTestProtocol.BuildServerHandshake(serverID, cookie));
+
+        using CancellationTokenSource timeout = new (TimeSpan.FromSeconds(10));
+
+        await Assert.That(await ChatTestProtocol.ReadCommand(stream, timeout.Token)).IsEqualTo((ushort) ChatProtocol.ChatServerToGameServer.NET_CHAT_GS_ACCEPT);
+
+        await ChatTestProtocol.WriteFrame(stream, BuildServerStatus(serverID, serverName));
+
+        ChatBuffer ping = new ();
+        ping.WriteCommand(ChatProtocol.Bidirectional.NET_CHAT_PING);
+
+        await ChatTestProtocol.WriteFrame(stream, ping);
+
+        ChatBuffer? pong = await ChatTestProtocol.ReadUntilCommand(stream, ChatProtocol.Bidirectional.NET_CHAT_PONG, TimeSpan.FromSeconds(10));
+
+        IDatabase distributedCacheStore = host.Services.GetRequiredService<IDatabase>();
+
+        MatchServer updatedServer = await distributedCacheStore.GetMatchServerByID(serverID)
+            ?? throw new NullReferenceException("Registered Match Server Is NULL");
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(pong).IsNotNull();
+            await Assert.That(updatedServer.Name).IsEqualTo(serverName);
+            await Assert.That(Context.MatchServerChatSessions[serverID].Metadata.Name).IsEqualTo(serverName);
+            await Assert.That(updatedServer.Status).IsEqualTo(ChatProtocol.ServerStatus.SERVER_STATUS_IDLE);
+            await Assert.That(updatedServer.Cookie).IsEqualTo(cookie);
+        }
+    }
+
+    [Test]
+    [Arguments("NEXUS AU", 1, "NEXUS AU 1")]
+    [Arguments("NEXUS AU", 5, "NEXUS AU 5")]
+    [Arguments("NEXUS2 AU", 1, "NEXUS2 AU 1")]
+    public async Task A_Base_Name_Is_Given_An_Instance_Suffix_Through_A_Quoted_Remote_Command(string prefix, int instance, string expectedName)
+    {
+        await using ChatServerHost host = await ChatServerHost.StartAsync(containerContext);
+
+        (int hostAccountID, string hostAccountName) = await ChatTestData.SeedAccount(host.Services, AccountType.ServerHost);
+
+        int serverID = Random.Shared.Next(100_000, 999_999);
+        string cookie = Guid.CreateVersion7().ToString();
+
+        await ChatTestData.SeedMatchServer(host.Services, serverID, hostAccountID, hostAccountName, cookie, instance: instance);
+
+        using TcpClient client = await host.ConnectMatchServerAsync();
+
+        NetworkStream stream = client.GetStream();
+
+        await ChatTestProtocol.WriteFrame(stream, ChatTestProtocol.BuildServerHandshake(serverID, cookie));
+        await ChatTestProtocol.WriteFrame(stream, BuildServerStatus(serverID, prefix));
+
+        await Assert.That(await ChatTestProtocol.ReadUntilRemoteCommand(stream, $"svr_name \"{expectedName}\"", TimeSpan.FromSeconds(10))).IsTrue();
+
+        foreach (ChatProtocol.ServerStatus serverState in new[]
+        {
+            ChatProtocol.ServerStatus.SERVER_STATUS_SLEEPING,
+            ChatProtocol.ServerStatus.SERVER_STATUS_IDLE,
+            ChatProtocol.ServerStatus.SERVER_STATUS_ACTIVE,
+            ChatProtocol.ServerStatus.SERVER_STATUS_IDLE
+        })
+        {
+            await ChatTestProtocol.WriteFrame(stream, BuildServerStatus(serverID, expectedName, serverState));
+        }
+
+        ChatBuffer ping = new ();
+        ping.WriteCommand(ChatProtocol.Bidirectional.NET_CHAT_PING);
+
+        await ChatTestProtocol.WriteFrame(stream, ping);
+
+        using CancellationTokenSource timeout = new (TimeSpan.FromSeconds(10));
+
+        List<string> subsequentCommands = [];
+
+        while (true)
+        {
+            ChatBuffer frame = new (await ChatTestProtocol.ReadFramePayload(stream, timeout.Token));
+            ushort command = BitConverter.ToUInt16(frame.ReadCommandBytes(), 0);
+
+            if (command == ChatProtocol.Bidirectional.NET_CHAT_PONG)
+                break;
+
+            if (command == ChatProtocol.ChatServerToGameServer.NET_CHAT_GS_REMOTE_COMMAND)
+            {
+                frame.ReadString();
+                subsequentCommands.Add(frame.ReadString());
+            }
+        }
+
+        IDatabase distributedCacheStore = host.Services.GetRequiredService<IDatabase>();
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(subsequentCommands.Any(command => command.StartsWith("svr_name", StringComparison.Ordinal))).IsFalse();
+            await Assert.That((await distributedCacheStore.GetMatchServerByID(serverID))?.Name).IsEqualTo(expectedName);
+        }
+    }
+
+    [Test]
+    [Arguments("NEXUS AU;quit")]
+    [Arguments("NEXUS AU\\quit")]
+    [Arguments("NEXUS AU\"quit")]
+    public async Task An_Unsafe_Advertised_Name_Is_Not_Executed_As_A_Remote_Command(string serverName)
     {
         await using ChatServerHost host = await ChatServerHost.StartAsync(containerContext);
 
@@ -25,12 +217,33 @@ public sealed class MatchServerHandshakeIntegrationTests(ServiceContainerContext
         NetworkStream stream = client.GetStream();
 
         await ChatTestProtocol.WriteFrame(stream, ChatTestProtocol.BuildServerHandshake(serverID, cookie));
+        await ChatTestProtocol.WriteFrame(stream, BuildServerStatus(serverID, serverName));
+
+        ChatBuffer ping = new ();
+        ping.WriteCommand(ChatProtocol.Bidirectional.NET_CHAT_PING);
+
+        await ChatTestProtocol.WriteFrame(stream, ping);
 
         using CancellationTokenSource timeout = new (TimeSpan.FromSeconds(10));
 
-        ushort command = await ChatTestProtocol.ReadCommand(stream, timeout.Token);
+        List<string> commands = [];
 
-        await Assert.That(command).IsEqualTo((ushort) ChatProtocol.ChatServerToGameServer.NET_CHAT_GS_ACCEPT);
+        while (true)
+        {
+            ChatBuffer frame = new (await ChatTestProtocol.ReadFramePayload(stream, timeout.Token));
+            ushort command = BitConverter.ToUInt16(frame.ReadCommandBytes(), 0);
+
+            if (command == ChatProtocol.Bidirectional.NET_CHAT_PONG)
+                break;
+
+            if (command == ChatProtocol.ChatServerToGameServer.NET_CHAT_GS_REMOTE_COMMAND)
+            {
+                frame.ReadString();
+                commands.Add(frame.ReadString());
+            }
+        }
+
+        await Assert.That(commands.Any(command => command.StartsWith("svr_name", StringComparison.Ordinal))).IsFalse();
     }
 
     [Test]
@@ -44,6 +257,15 @@ public sealed class MatchServerHandshakeIntegrationTests(ServiceContainerContext
         string cookie = Guid.CreateVersion7().ToString();
 
         await ChatTestData.SeedMatchServer(host.Services, serverID, hostAccountID, hostAccountName, cookie);
+
+        IDatabase cache = host.Services.GetRequiredService<IDatabase>();
+
+        MatchServer seededServer = await cache.GetMatchServerByID(serverID)
+            ?? throw new NullReferenceException("Seeded Match Server Is NULL");
+
+        seededServer.Name = "NEXUS2 AU 1";
+
+        await cache.SetMatchServer(hostAccountName, seededServer);
 
         using TcpClient first = await host.ConnectMatchServerAsync();
 
@@ -79,6 +301,7 @@ public sealed class MatchServerHandshakeIntegrationTests(ServiceContainerContext
             await Assert.That(firstWasSuperseded).IsTrue();
             await Assert.That(Context.MatchServerChatSessions.ContainsKey(serverID)).IsTrue();
             await Assert.That(cacheEntryPreserved).IsTrue();
+            await Assert.That((await cache.GetMatchServerByID(serverID))?.Name).IsEqualTo("NEXUS2 AU 1");
         }
     }
 
@@ -194,5 +417,46 @@ public sealed class MatchServerHandshakeIntegrationTests(ServiceContainerContext
         bool quitDelivered = await ChatTestProtocol.ReadUntilRemoteCommand(stream, "quit", TimeSpan.FromSeconds(10));
 
         await Assert.That(quitDelivered).IsTrue();
+    }
+    private static ChatBuffer BuildServerStatus(int serverID, string serverName, ChatProtocol.ServerStatus serverState = ChatProtocol.ServerStatus.SERVER_STATUS_IDLE)
+    {
+        ChatBuffer status = new ();
+
+        status.WriteCommand(ChatProtocol.GameServerToChatServer.NET_CHAT_GS_STATUS);
+        status.WriteInt32(serverID);
+        status.WriteString("127.0.0.1");
+        status.WriteInt16(11235);
+        status.WriteString("AU");
+        status.WriteString(serverName);
+        status.WriteInt32(1);
+        status.WriteInt32(0);
+        status.WriteInt8((byte) serverState);
+        status.WriteInt8(0);
+        status.WriteInt16(0);
+        status.WriteString("caldavar");
+        status.WriteString("Public Match");
+        status.WriteString("ap");
+        status.WriteInt8(5);
+        status.WriteInt16(0);
+        status.WriteInt16(0);
+        status.WriteInt32(0);
+        status.WriteInt32(0);
+
+        // Two Team Records And Ten Player Records
+        for (int recordIndex = 0; recordIndex < 12; recordIndex++)
+            status.WriteString(string.Empty);
+
+        status.WriteInt32(0);
+        status.WriteInt32(0);
+        status.WriteInt64(1024);
+        status.WriteInt64(2048);
+        status.WriteInt64(1024);
+        status.WriteInt64(2048);
+        status.WriteString("4.14.1.2");
+        status.WriteInt32(0);
+        status.WriteFloat32(0);
+        status.WriteString("Test Matchserver");
+
+        return status;
     }
 }
