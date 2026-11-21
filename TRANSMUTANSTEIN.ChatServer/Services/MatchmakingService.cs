@@ -640,6 +640,12 @@ public class MatchmakingService : BackgroundService, IDisposable
     /// </summary>
     private static readonly TimeSpan MatchServerStatusFreshnessThreshold = TimeSpan.FromSeconds(150);
 
+    internal static bool IsUnassignedIdleServer(MatchServer server, IReadOnlySet<int> assignedServerIDs)
+        => server.IsRetired is false && server.Status is ServerStatus.SERVER_STATUS_IDLE && assignedServerIDs.Contains(server.ID) is false;
+
+    internal static bool HasFreshServerStatus(MatchServerChatSessionMetadata metadata, DateTimeOffset now)
+        => now - metadata.LastStatusUpdate <= MatchServerStatusFreshnessThreshold;
+
     /// <summary>
     ///     Finds an idle server for a match along with its chat session.
     ///     Servers already assigned to an active match are excluded, because the cached server status only changes once the server reports its new state, so without this exclusion two matches spawned in close succession would select the same idle server.
@@ -654,7 +660,7 @@ public class MatchmakingService : BackgroundService, IDisposable
 
         // Rank Unassigned, Idle Servers By Regional Proximity To The Match's Requested Regions
         List<MatchServer> candidateServers = [.. servers
-            .Where(server => server.IsRetired is false && server.Status is ServerStatus.SERVER_STATUS_IDLE && assignedServerIDs.Contains(server.ID) is false)
+            .Where(server => IsUnassignedIdleServer(server, assignedServerIDs))
             .OrderBy(server => RegionProximity.GetDistance(match.CommonGameRegions, server.Location))];
 
         // Find The Closest Candidate Server That Also Has An Active Chat Session
@@ -663,7 +669,7 @@ public class MatchmakingService : BackgroundService, IDisposable
             if (Context.MatchServerChatSessions.TryGetValue(server.ID, out MatchServerChatSession? session))
             {
                 // Skip A Server Whose Chat Session Has Gone Quiet (No Recent Status Heartbeat), Which Indicates A Stale Connection Not Yet Detected At The Transport Level
-                if (DateTimeOffset.UtcNow - session.Metadata.LastStatusUpdate > MatchServerStatusFreshnessThreshold)
+                if (HasFreshServerStatus(session.Metadata, DateTimeOffset.UtcNow) is false)
                 {
                     _logger.LogWarning(@"Skipping Idle Server With A Stale Chat Session: ServerID={MatchServerID}, LastStatusUpdate={LastStatusUpdate}", server.ID, session.Metadata.LastStatusUpdate);
 

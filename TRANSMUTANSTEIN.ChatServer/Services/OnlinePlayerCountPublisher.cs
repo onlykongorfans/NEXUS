@@ -30,5 +30,17 @@ public sealed class OnlinePlayerCountPublisher(IDatabase distributedCache, ILogg
         OnlinePlayerCountSnapshot snapshot = new (count, DateTimeOffset.UtcNow);
 
         await distributedCache.StringSetAsync(OnlinePlayerCountSnapshot.CacheKey, JsonSerializer.Serialize(snapshot), OnlinePlayerCountSnapshot.MaximumAge);
+
+        try
+        {
+            List<MatchServer> servers = await distributedCache.GetMatchServers();
+            OnlinePlayerDetailsSnapshot details = OnlinePlayerDetails.Capture(servers, DateTimeOffset.UtcNow);
+            string json = JsonSerializer.Serialize(details, OnlinePlayerDetailsSnapshot.JSONOptions);
+            await distributedCache.StringSetAsync(OnlinePlayerDetailsSnapshot.CacheKey, json, OnlinePlayerCountSnapshot.MaximumAge);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Failed To Publish Online Player Details");
+        }
     }
 }

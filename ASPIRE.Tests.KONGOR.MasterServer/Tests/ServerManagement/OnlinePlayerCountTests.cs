@@ -15,6 +15,8 @@ public sealed class OnlinePlayerCountTests(KONGORIntegrationWebApplicationFactor
         IDatabase cache = webApplicationFactory.Services.GetRequiredService<IDatabase>();
         OnlinePlayerCountSnapshot snapshot = new (playerCount, DateTimeOffset.UtcNow);
         await cache.StringSetAsync(OnlinePlayerCountSnapshot.CacheKey, JsonSerializer.Serialize(snapshot), TimeSpan.FromMinutes(1));
+        OnlinePlayerDetailsSnapshot details = new (1, snapshot.UpdatedAt.ToUnixTimeSeconds(), 0, 0, [], []);
+        await cache.StringSetAsync(OnlinePlayerDetailsSnapshot.CacheKey, JsonSerializer.Serialize(details, OnlinePlayerDetailsSnapshot.JSONOptions), TimeSpan.FromMinutes(1));
 
         using HttpResponseMessage response = await Request(queryStringRoute);
         IDictionary<object, object> body = await PlinkoTestsHelper.DeserialisePhpResponse(response);
@@ -25,6 +27,28 @@ public sealed class OnlinePlayerCountTests(KONGORIntegrationWebApplicationFactor
         await Assert.That(Convert.ToInt64(body["updated_at"])).IsEqualTo(snapshot.UpdatedAt.ToUnixTimeSeconds());
         await Assert.That(response.Headers.CacheControl?.NoStore).IsTrue();
         await Assert.That(body.Count).IsEqualTo(3);
+    }
+
+    [Test]
+    [Arguments(0, true)]
+    [Arguments(-60, false)]
+    [Arguments(60, false)]
+    public async Task Requested_Details_Have_Independent_Freshness_And_Preserve_The_Headline_Count(int snapshotAgeOffset, bool detailsAvailable)
+    {
+        IDatabase cache = webApplicationFactory.Services.GetRequiredService<IDatabase>();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        await cache.StringSetAsync(OnlinePlayerCountSnapshot.CacheKey, JsonSerializer.Serialize(new OnlinePlayerCountSnapshot(8, now)));
+        OnlinePlayerDetailsSnapshot details = new (1, now.AddSeconds(snapshotAgeOffset).ToUnixTimeSeconds(), 1, 0, [new ("USW", 1, 2)], []);
+        string json = JsonSerializer.Serialize(details, OnlinePlayerDetailsSnapshot.JSONOptions);
+        await cache.StringSetAsync(OnlinePlayerDetailsSnapshot.CacheKey, json);
+
+        using HttpResponseMessage response = await Request(includeDetails: true);
+        IDictionary<object, object> body = await PlinkoTestsHelper.DeserialisePhpResponse(response);
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        await Assert.That(Convert.ToInt32(body["player_count"])).IsEqualTo(8);
+        await Assert.That(Convert.ToInt32(body["details_available"])).IsEqualTo(detailsAvailable ? 1 : 0);
+        await Assert.That(Convert.ToString(body["details_json"])).IsEqualTo(detailsAvailable ? json : string.Empty);
     }
 
     [Test]
@@ -90,7 +114,7 @@ public sealed class OnlinePlayerCountTests(KONGORIntegrationWebApplicationFactor
         await Assert.That(normal.StatusCode).IsEqualTo(HttpStatusCode.OK);
     }
 
-    private async Task<HttpResponseMessage> Request(bool queryStringRoute = true)
+    private async Task<HttpResponseMessage> Request(bool queryStringRoute = true, bool includeDetails = false)
     {
         string cookie = Guid.NewGuid().ToString();
         await webApplicationFactory.Services.GetRequiredService<IDatabase>().SetAccountNameForSessionCookie(cookie, "PopulationTest");
@@ -98,6 +122,9 @@ public sealed class OnlinePlayerCountTests(KONGORIntegrationWebApplicationFactor
 
         if (queryStringRoute is false)
             form["f"] = "get_online_player_count";
+
+        if (includeDetails)
+            form["include_details"] = "1";
 
         return await webApplicationFactory.CreateClient().PostAsync(queryStringRoute ? "client_requester.php?f=get_online_player_count" : "client_requester.php", new FormUrlEncodedContent(form));
     }

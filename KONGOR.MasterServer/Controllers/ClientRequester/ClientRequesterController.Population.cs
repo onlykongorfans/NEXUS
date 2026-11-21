@@ -28,6 +28,38 @@ public partial class ClientRequesterController
             ["updated_at"] = available && snapshot is not null ? snapshot.UpdatedAt.ToUnixTimeSeconds() : 0L
         };
 
+        if (Request.Form["include_details"] is { Count: 1 } includeDetails && includeDetails[0] == "1")
+        {
+            string? details = await GetOnlinePlayerDetails();
+            response["details_available"] = details is null ? 0 : 1;
+            response["details_json"] = details ?? string.Empty;
+        }
+
         return Ok(PhpSerialization.Serialize(response));
+    }
+
+    private async Task<string?> GetOnlinePlayerDetails()
+    {
+        try
+        {
+            RedisValue cached = await DistributedCache.StringGetAsync(OnlinePlayerDetailsSnapshot.CacheKey);
+
+            if (cached.HasValue is false)
+                return null;
+
+            string json = cached.ToString();
+            OnlinePlayerDetailsSnapshot? details = JsonSerializer.Deserialize<OnlinePlayerDetailsSnapshot>(json, OnlinePlayerDetailsSnapshot.JSONOptions);
+            long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+            if (details is not { Version: OnlinePlayerDetailsSnapshot.CurrentVersion, GamesInProgress: >= 0, QueuedPlayers: >= 0, ServerLocations: not null, QueueRegions: not null }
+                || details.UpdatedAt > now || details.UpdatedAt <= now - (long) OnlinePlayerCountSnapshot.MaximumAge.TotalSeconds)
+                return null;
+
+            return json;
+        }
+        catch (RedisException exception) { Logger.LogWarning(exception, "Unable To Read Online Player Details"); }
+        catch (JsonException exception) { Logger.LogWarning(exception, "Invalid Online Player Details Snapshot"); }
+
+        return null;
     }
 }
