@@ -25,7 +25,7 @@
     </head>
 
     <body>
-        <Routes @rendermode="new InteractiveServerRenderMode(prerender: false)" />
+        <Routes @rendermode="RouteRenderMode" />
 
         <canvas id="fluid" aria-hidden="true"></canvas>
 
@@ -35,3 +35,22 @@
     </body>
 
 </html>
+
+@code {
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private InteractiveServerRenderMode RouteRenderMode
+    {
+        get
+        {
+            Type? pageType = HttpContext?.GetEndpoint()?.Metadata.GetMetadata<ComponentTypeMetadata>()?.Type;
+
+            // Account Pages Depend On Browser Storage And Interactive Forms
+            bool prerender = pageType == typeof(Pages.Home) || pageType == typeof(Pages.Downloads) ||
+                pageType == typeof(Pages.HowToPlay) || pageType == typeof(Pages.NotFound) || pageType == typeof(Pages.CheckYourEmail);
+
+            return new InteractiveServerRenderMode(prerender);
+        }
+    }
+}

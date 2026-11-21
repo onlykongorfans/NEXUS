@@ -1,3 +1,5 @@
+@inject NavigationManager NavigationManager
+
 <Router AppAssembly="typeof(global::DAWNBRINGER.WebPortal.UI.Components.Application).Assembly">
     <Found Context="routeData">
         <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
@@ -8,7 +10,7 @@
                             <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                     <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Large" Color="Color.Primary" />
-                                    <MudText Typo="Typo.h5">Authorisation Required</MudText>
+                                    <MudText Typo="Typo.h5" HtmlTag="h1">Authorisation Required</MudText>
                                 </MudStack>
                                 <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center">
                                     You Need To Be Logged In To Access This Part Of The Portal
@@ -16,7 +18,7 @@
                             </MudStack>
 
                             <MudStack Row="true" Justify="Justify.Center" Spacing="2" Class="mt-4">
-                                <MudButton Href="/login" Variant="Variant.Filled" Color="Color.Primary" Class="glow-button">
+                                <MudButton Href="@LoginURL" Variant="Variant.Filled" Color="Color.Primary" Class="glow-button">
                                     Log In
                                 </MudButton>
                                 <MudButton Href="/" Variant="Variant.Outlined" Color="Color.Primary">
@@ -31,3 +33,7 @@
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
 </Router>
+
+@code {
+    private string LoginURL => QueryHelpers.AddQueryString("/login", "returnUrl", "/" + NavigationManager.ToBaseRelativePath(NavigationManager.Uri));
+}

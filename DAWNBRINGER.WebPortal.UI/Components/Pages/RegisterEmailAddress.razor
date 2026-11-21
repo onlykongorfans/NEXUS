@@ -1,6 +1,7 @@
 @page "/email/register"
 
 @inject PortalAuthenticationService AuthenticationService
+@inject NavigationManager NavigationManager
 @inject ISnackbar Snackbar
 
 <PageTitle>Register - Project KONGOR</PageTitle>
@@ -11,7 +12,7 @@
             <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                     <MudIcon Icon="@Icons.Material.Filled.Email" Size="Size.Large" Color="Color.Primary" />
-                    <MudText Typo="Typo.h5">Register Email Address</MudText>
+                    <MudText Typo="Typo.h5" HtmlTag="h1">Register Email Address</MudText>
                 </MudStack>
                 <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center">
                     Enter your email address to begin registration. A verification link will be sent to your inbox.
@@ -69,7 +70,7 @@
 
 @code {
 
-    private RegisterEmailAddressFormModel FormModel { get; set; } = new ();
+    private RegisterEmailAddressFormModel FormModel { get; } = new ();
 
     private bool Processing { get; set; }
 
@@ -87,10 +88,7 @@
 
             if (response.StatusCode is HttpStatusCode.OK)
             {
-                string emailAddress = FormModel.EmailAddress;
-                FormModel = new RegisterEmailAddressFormModel();
-                Snackbar.Add("Email address registered successfully.", Severity.Success);
-                Snackbar.Add($"A verification link has been sent to {emailAddress}.", Severity.Info);
+                NavigationManager.NavigateTo("/email/check", replace: true);
             }
             else
             {

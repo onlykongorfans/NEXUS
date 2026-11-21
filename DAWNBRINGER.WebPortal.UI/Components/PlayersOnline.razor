@@ -1,0 +1,303 @@
+@implements IAsyncDisposable
+@inject PlayersOnlineService PopulationService
+@inject IBrowserViewportService BrowserViewportService
+
+<button type="button" class="players-online-toggle" aria-haspopup="dialog" disabled="@(!RendererInfo.IsInteractive)"
+        @onclick="() => SetDetailsVisible(true)">
+    <span class="players-online-icon" aria-hidden="true">
+        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+    </span>
+    <span class="players-online-toggle-label">
+        <span class="players-online-heading-group">
+            <span>Players Online</span>
+            <span class="players-online-title-count">@HeadlineValue</span>
+        </span>
+        <span class="players-online-toggle-hint">View details</span>
+    </span>
+</button>
+
+@if (IsMobileLayout is not true)
+{
+    <section class="players-online-card" aria-labelledby="players-online-heading">
+        @PanelTitle("players-online-heading")
+        @PanelContent("players-online")
+    </section>
+}
+
+<MudDialog Visible="DetailsVisible" VisibleChanged="SetDetailsVisible" Options="PanelOptions"
+           Class="players-online-dialog" TitleClass="players-online-dialog-title" ContentClass="players-online-dialog-content">
+    <TitleContent>@PanelTitle("players-online-mobile-heading")</TitleContent>
+    <DialogContent>@PanelContent("players-online-mobile")</DialogContent>
+</MudDialog>
+
+@code {
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(10);
+
+    private static readonly DialogOptions PanelOptions = new()
+    {
+        CloseButton = true,
+        CloseOnEscapeKey = true,
+        FullWidth = true,
+        MaxWidth = MaxWidth.Small
+    };
+
+    private readonly CancellationTokenSource Lifetime = new();
+    private readonly Guid ViewportObserverID = Guid.NewGuid();
+    private Task? ViewportSubscription { get; set; }
+    private CancellationTokenSource? DetailsPolling { get; set; }
+    private PlayersOnlineHeadline? Headline { get; set; }
+    private PlayersOnlineDetails? Details { get; set; }
+    private bool? IsMobileLayout { get; set; }
+    private bool DetailsVisible { get; set; }
+    private bool HeadlineRefreshFailed { get; set; }
+    private bool DetailsRefreshFailed { get; set; }
+
+    private bool HeadlineIsStale => Headline is { } headline && (HeadlineRefreshFailed || headline.ExpiresAt <= DateTimeOffset.UtcNow);
+    private bool DetailsAreStale => Details is { } details && (DetailsRefreshFailed || details.ExpiresAt <= DateTimeOffset.UtcNow);
+
+    private RenderFragment HeadlineValue => @<text>
+        @if (Headline is null)
+        {
+            <span aria-hidden="true">—</span>
+            <span class="mud-sr-only">Online count unavailable</span>
+        }
+        else
+        {
+            @FormatCount(Headline.PlayerCount)
+            @if (HeadlineIsStale)
+            {
+                <span class="players-online-last-report">Last known</span>
+            }
+        }
+    </text>;
+
+    private RenderFragment PanelTitle(string headingID) => @<header class="players-online-title">
+        <span class="players-online-icon" aria-hidden="true">
+            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+        </span>
+        <div class="players-online-heading-group">
+            <MudText Typo="Typo.h5" HtmlTag="h2" id="@headingID">Players Online</MudText>
+            <span class="players-online-title-count">@HeadlineValue</span>
+        </div>
+        @if (DetailsAreStale)
+        {
+            <span class="players-online-status" role="status">Last known counts</span>
+        }
+    </header>;
+
+    private RenderFragment PanelContent(string sectionID) => @<div class="players-online-content">
+        @if (Details is { } details)
+        {
+            <div class="players-online-server-grid">
+                <section aria-labelledby="@(sectionID + "-games")">
+                    <h3 id="@(sectionID + "-games")">Games in progress</h3>
+                    <dl class="players-online-rows">
+                        <div class="players-online-row players-online-total">
+                            <dt>All locations</dt>
+                            <dd>@FormatCount(details.GamesInProgress)</dd>
+                        </div>
+                        @foreach (PlayersOnlineLocation location in details.ServerLocations)
+                        {
+                            <div class="players-online-row">
+                                <dt>@FormatLocation(location.Location)</dt>
+                                <dd>@FormatCount(location.GamesInProgress)</dd>
+                            </div>
+                        }
+                    </dl>
+                </section>
+
+                <section aria-labelledby="@(sectionID + "-servers")">
+                    <h3 id="@(sectionID + "-servers")">Servers available</h3>
+                    @if (details.ServerLocations.Count == 0)
+                    {
+                        <p class="players-online-empty">No locations reported</p>
+                    }
+                    else
+                    {
+                        <dl class="players-online-rows">
+                            @foreach (PlayersOnlineLocation location in details.ServerLocations)
+                            {
+                                <div class="players-online-row">
+                                    <dt>@FormatLocation(location.Location)</dt>
+                                    <dd>@FormatCount(location.ServersAvailable)</dd>
+                                </div>
+                            }
+                        </dl>
+                    }
+                </section>
+            </div>
+
+            <section class="players-online-queue-section" aria-labelledby="@(sectionID + "-tmm")">
+                <h3 id="@(sectionID + "-tmm")">Players queued for TMM</h3>
+                <div class="players-online-queue-grid">
+                    <section class="players-online-queue" aria-labelledby="@(sectionID + "-caldavar")">
+                        <h4 id="@(sectionID + "-caldavar")">Forests of Caldavar <span>Ranked Pick (Normal)</span></h4>
+                        @QueueRows(details.RankedPick)
+                    </section>
+                    <section class="players-online-queue" aria-labelledby="@(sectionID + "-midwars")">
+                        <h4 id="@(sectionID + "-midwars")">Mid Wars</h4>
+                        @QueueRows(details.MidWars)
+                    </section>
+                </div>
+            </section>
+        }
+        else
+        {
+            <p class="players-online-empty" role="status">@(DetailsRefreshFailed ? "Details unavailable" : "Loading details…")</p>
+        }
+    </div>;
+
+    private static string FormatCount(int count) => count.ToString("N0", CultureInfo.CurrentCulture);
+
+    private static string FormatLocation(string code, bool isQueue = false) => code.ToUpperInvariant() switch
+    {
+        "AU"      => "Australia",
+        "US"      => isQueue ? "US (shared pool)" : "United States",
+        "USE"     => "US East",
+        "USW"     => "US West",
+        "EU"      => "Europe",
+        "RU"      => "Russia",
+        "TR"      => "Türkiye",
+        "LAT"     => "Latin America",
+        "BR"      => "Brazil",
+        "SEA"     => "Southeast Asia",
+        "SG"      => "Singapore",
+        "MY"      => "Malaysia",
+        "PH"      => "Philippines",
+        "TH"      => "Thailand",
+        "ID"      => "Indonesia",
+        "VN"      => "Vietnam",
+        "CN"      => "China",
+        "KR"      => "Korea",
+        "NEWERTH" => "Any region",
+        "UNKNOWN" => "Unknown location",
+        _         => code
+    };
+
+    private RenderFragment QueueRows(IReadOnlyList<PlayersOnlineQueue> rows) => @<text>
+        @if (rows.Count == 0)
+        {
+            <p class="players-online-empty">No pools reported</p>
+        }
+        else
+        {
+            <dl class="players-online-rows">
+                @foreach (PlayersOnlineQueue pool in rows)
+                {
+                    <div class="players-online-row">
+                        <dt>@FormatLocation(pool.Region, isQueue: true)</dt>
+                        <dd>@FormatCount(pool.QueuedPlayers)</dd>
+                    </div>
+                }
+            </dl>
+        }
+    </text>;
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender is false)
+            return Task.CompletedTask;
+
+        _ = Poll(RefreshHeadline, Lifetime.Token);
+        ViewportSubscription = BrowserViewportService.SubscribeAsync(ViewportObserverID, HandleViewportChange,
+            new ResizeOptions { NotifyOnBreakpointOnly = true }, fireImmediately: true);
+        return ViewportSubscription;
+    }
+
+    private Task HandleViewportChange(BrowserViewportEventArgs viewport) => InvokeAsync(() =>
+    {
+        bool isMobile = viewport.Breakpoint == Breakpoint.Xs;
+        if (Lifetime.IsCancellationRequested || IsMobileLayout == isMobile)
+            return;
+
+        IsMobileLayout = isMobile;
+        if (isMobile is false)
+            DetailsVisible = false;
+
+        UpdateDetailsPolling();
+        StateHasChanged();
+    });
+
+    private void SetDetailsVisible(bool visible)
+    {
+        DetailsVisible = visible && IsMobileLayout is not false;
+        UpdateDetailsPolling();
+    }
+
+    private void UpdateDetailsPolling()
+    {
+        if (IsMobileLayout is false || DetailsVisible)
+        {
+            if (DetailsPolling is null)
+            {
+                DetailsPolling = CancellationTokenSource.CreateLinkedTokenSource(Lifetime.Token);
+                _ = Poll(RefreshDetails, DetailsPolling.Token);
+            }
+        }
+        else
+        {
+            StopDetailsPolling();
+        }
+    }
+
+    private async Task Poll(Func<CancellationToken, Task> refresh, CancellationToken cancellationToken)
+    {
+        using PeriodicTimer timer = new(RefreshInterval);
+
+        try
+        {
+            do
+            {
+                await refresh(cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                StateHasChanged();
+            }
+            while (await timer.WaitForNextTickAsync(cancellationToken));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+    }
+
+    private async Task RefreshHeadline(CancellationToken cancellationToken)
+    {
+        PlayersOnlineHeadline? snapshot = await PopulationService.GetHeadline(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        HeadlineRefreshFailed = snapshot is null || snapshot.ExpiresAt <= DateTimeOffset.UtcNow;
+        if (HeadlineRefreshFailed is false)
+            Headline = snapshot;
+    }
+
+    private async Task RefreshDetails(CancellationToken cancellationToken)
+    {
+        PlayersOnlineDetails? snapshot = await PopulationService.GetDetails(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        DetailsRefreshFailed = snapshot is null || snapshot.ExpiresAt <= DateTimeOffset.UtcNow;
+        if (DetailsRefreshFailed is false)
+            Details = snapshot;
+    }
+
+    private void StopDetailsPolling()
+    {
+        DetailsPolling?.Cancel();
+        DetailsPolling?.Dispose();
+        DetailsPolling = null;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Lifetime.Cancel();
+        StopDetailsPolling();
+        Lifetime.Dispose();
+
+        if (ViewportSubscription is not null)
+        {
+            try
+            {
+                await ViewportSubscription;
+                await BrowserViewportService.UnsubscribeAsync(ViewportObserverID);
+            }
+            catch (JSDisconnectedException) { }
+        }
+    }
+}

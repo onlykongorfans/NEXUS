@@ -10,6 +10,7 @@
 <MudContainer MaxWidth="MaxWidth.Large" Class="px-4 px-sm-6 pt-8">
     <AuthorizeView Context="authContext">
         <Authorized>
+            <MudText Typo="Typo.h4" HtmlTag="h1" Class="mb-4 section-header">Account</MudText>
             @if (LoadingAccountOverview)
             {
                 <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="py-16">
@@ -31,7 +32,7 @@
                         <div class="d-flex flex-wrap justify-space-between align-start gap-4">
                             <MudStack Spacing="2">
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">Current Account</MudText>
-                                <MudText Typo="Typo.h4" Class="account-name-glow" Color="Color.Primary">@DisplayName</MudText>
+                                <MudText Typo="Typo.h4" HtmlTag="h2" Class="account-name-glow" Color="Color.Primary">@DisplayName</MudText>
                             </MudStack>
                             <div class="d-flex flex-wrap gap-2">
                                 <MudButton Href="/account/icons" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Image">
@@ -75,7 +76,7 @@
                 @* Sibling Accounts Table *@
                 <MudCard Class="glass-card pa-6 mb-6 animate-fade-in-delay-1" Elevation="0">
                     <MudStack Spacing="2" Class="mb-4">
-                        <MudText Typo="Typo.h6">Sibling Accounts</MudText>
+                        <MudText Typo="Typo.h6" HtmlTag="h2">Sibling Accounts</MudText>
                         <MudText Typo="Typo.body2" Color="Color.Secondary">
                             All accounts linked to this user, including clan membership.
                         </MudText>
@@ -115,7 +116,7 @@
                         <MudCard Class="glass-card pa-4 animate-fade-in-delay-2" Elevation="0" Style="height: 100%;">
                             <MudCardContent>
                                 <MudStack Spacing="2" Class="mb-4">
-                                    <MudText Typo="Typo.h6">Update Email Address</MudText>
+                                    <MudText Typo="Typo.h6" HtmlTag="h2">Update Email Address</MudText>
                                     <MudText Typo="Typo.body2" Color="Color.Secondary">
                                         A verification link will be sent to your new email address.
                                     </MudText>
@@ -182,7 +183,7 @@
                         <MudCard Class="glass-card pa-4 animate-fade-in-delay-2" Elevation="0" Style="height: 100%;">
                             <MudCardContent>
                                 <MudStack Spacing="2" Class="mb-4">
-                                    <MudText Typo="Typo.h6">Update Password</MudText>
+                                    <MudText Typo="Typo.h6" HtmlTag="h2">Update Password</MudText>
                                     <MudText Typo="Typo.body2" Color="Color.Secondary">
                                         A confirmation link will be sent to your email address.
                                     </MudText>

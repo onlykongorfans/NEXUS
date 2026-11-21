@@ -8,7 +8,7 @@
             <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                     <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Primary" />
-                    <MudText Typo="Typo.h5">Page Not Found</MudText>
+                    <MudText Typo="Typo.h5" HtmlTag="h1">Page Not Found</MudText>
                 </MudStack>
                 <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center">
                     The portal has no route mapped to this address.
@@ -28,4 +28,22 @@
 
     [Parameter]
     public string? Path { get; set; }
+
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (HttpContext?.Response is { HasStarted: false } response)
+        {
+            // Let Razor Render The Page Before Sending The 404 Status
+            response.OnStarting(() =>
+            {
+                if (response.StatusCode == StatusCodes.Status200OK)
+                    response.StatusCode = StatusCodes.Status404NotFound;
+
+                return Task.CompletedTask;
+            });
+        }
+    }
 }

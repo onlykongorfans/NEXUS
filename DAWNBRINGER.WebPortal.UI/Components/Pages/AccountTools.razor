@@ -20,7 +20,7 @@
                 </MudButton>
                 <MudStack Spacing="2">
                     <MudText Typo="Typo.caption" Color="Color.Secondary">Account</MudText>
-                    <MudText Typo="Typo.h4" Color="Color.Primary">Tools</MudText>
+                    <MudText Typo="Typo.h4" HtmlTag="h1" Color="Color.Primary">Tools</MudText>
                     <MudText Typo="Typo.body2" Color="Color.Secondary">
                         Tools available on your account. Some tools require elevated permissions, and do not display for accounts without those permissions.
                     </MudText>
@@ -50,7 +50,7 @@
                                     <MudStack Spacing="2" Class="mb-2">
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                             <MudIcon Icon="@tool.Icon" Color="Color.Primary" />
-                                            <MudText Typo="Typo.h6">@tool.Name</MudText>
+                                            <MudText Typo="Typo.h6" HtmlTag="h2">@tool.Name</MudText>
                                         </MudStack>
                                         <MudText Typo="Typo.body2" Color="Color.Secondary">
                                             @tool.Description
@@ -80,7 +80,7 @@
             @* Add Host Account Dialog *@
             <MudDialog @bind-Visible="AddHostAccountDialogVisible" Options="DialogOptions">
                 <TitleContent>
-                    <MudText Typo="Typo.h6">Add Host Account</MudText>
+                    <MudText Typo="Typo.h6" HtmlTag="h2">Add Host Account</MudText>
                 </TitleContent>
                 <DialogContent>
                     <EditForm Model="AddHostAccountFormModel" OnValidSubmit="HandleAddHostAccountSubmit" id="add-host-account-form">
@@ -133,7 +133,7 @@
             @* Issue Host Authorisation Token Dialog (Admin) *@
             <MudDialog @bind-Visible="IssueHostAuthorisationDialogVisible" Options="DialogOptions">
                 <TitleContent>
-                    <MudText Typo="Typo.h6">Issue Host Account Authorisation Token</MudText>
+                    <MudText Typo="Typo.h6" HtmlTag="h2">Issue Host Account Authorisation Token</MudText>
                 </TitleContent>
                 <DialogContent>
                     @if (IssuedAuthorisationToken is null)

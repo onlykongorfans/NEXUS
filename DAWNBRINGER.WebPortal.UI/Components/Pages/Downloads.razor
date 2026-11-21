@@ -4,98 +4,86 @@
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="px-4 px-sm-6 pt-8">
 
-    @* Page Header *@
     <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="mb-6 animate-fade-in">
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
             <MudIcon Icon="@Icons.Material.Filled.Download" Size="Size.Large" Color="Color.Primary" />
-            <MudText Typo="Typo.h4" Class="section-header">Downloads</MudText>
+            <MudText Typo="Typo.h4" HtmlTag="h1" Class="section-header">Downloads</MudText>
         </MudStack>
         <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary" Style="max-width: 600px;">
-            Everything you need to play Heroes Of Newerth or host your own match servers.
-            Choose the tools and distributions for your platform.
+            Download Heroes Of Newerth to play, or get the tools to host a match server.
         </MudText>
     </MudStack>
 
-    @* Launcher Section *@
-    <MudCard Class="glass-card pa-6 mb-6 animate-fade-in-delay-1" Elevation="0">
-        <MudCardContent>
-            <MudStack Spacing="2">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudIcon Icon="@Icons.Material.Filled.RocketLaunch" Size="Size.Medium" Color="Color.Primary" />
-                    <MudText Typo="Typo.h5">Launcher</MudText>
-                </MudStack>
-                <MudText Typo="Typo.body1">
-                    Lightweight tools for launching the game client or match server. The launcher handles updates,
-                    configuration, and starting the application. Requires the corresponding distribution to be installed.
-                </MudText>
-            </MudStack>
-        </MudCardContent>
-        <MudCardActions Class="gap-2">
-            <MudButton Href="https://github.com/onlykongorfans/WILLOWMAKER/releases" Target="_blank" Variant="Variant.Filled" Color="Color.Primary" Class="glow-button" StartIcon="@Icons.Material.Filled.SportsEsports">
-                Game Client Launcher
-            </MudButton>
-            <MudButton Href="https://github.com/Project-KONGOR-Open-Source/COMPEL/releases/latest" Target="_blank" Variant="Variant.Filled" Color="Color.Primary" Class="glow-button" StartIcon="@Icons.Material.Filled.Dns">
-                Match Server Launcher
-            </MudButton>
-        </MudCardActions>
-    </MudCard>
-
-    <hr class="section-divider" />
-
-    @* Distributions Row *@
-    <MudGrid Spacing="4" Class="animate-fade-in-delay-2">
-        @* Game Client Distribution *@
+    <MudGrid Spacing="4" Class="mb-6 animate-fade-in-delay-1">
         <MudItem xs="12" md="6">
-            <MudCard Class="glass-card pa-4" Elevation="0" Style="height: 100%;">
-                <MudCardContent>
-                    <MudStack Spacing="2">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@Icons.Material.Filled.SportsEsports" Size="Size.Medium" Color="Color.Primary" />
-                            <MudText Typo="Typo.h5">Game Client Distribution</MudText>
-                        </MudStack>
-                        <MudText Typo="Typo.body1">
-                            The complete game client files required to play Heroes Of Newerth.
-                            Download the distribution for your operating system.
-                        </MudText>
+            <MudCard Class="glass-card pa-4" Elevation="0" Style="height: 100%;" role="region" aria-labelledby="play-downloads">
+                <MudCardContent Class="d-flex flex-column gap-6">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.SportsEsports" Size="Size.Medium" Color="Color.Primary" />
+                        <MudText Typo="Typo.h5" HtmlTag="h2" id="play-downloads">Play</MudText>
+                    </MudStack>
+
+                    <MudStack Spacing="2" AlignItems="AlignItems.Start">
+                        <MudText Typo="Typo.h6" HtmlTag="h3">Game Client Launcher</MudText>
+                        <MudText>Use WILLOWMAKER to update and launch the installed game client.</MudText>
+                        <MudButton Href="https://github.com/onlykongorfans/WILLOWMAKER/releases" Target="_blank" Variant="Variant.Filled" Color="Color.Primary" Class="glow-button" StartIcon="@Icons.Material.Filled.Download">
+                            Get WILLOWMAKER
+                        </MudButton>
+                    </MudStack>
+
+                    <MudDivider />
+
+                    <MudStack Spacing="2" AlignItems="AlignItems.Start">
+                        <MudText Typo="Typo.h6" HtmlTag="h3">Game Client Distribution</MudText>
+                        <MudText>Download the game files if you don’t already have them installed.</MudText>
+                        <div class="d-flex flex-wrap gap-2">
+                            <MudButton Href="https://drive.proton.me/urls/TGJHBP4QV0#EZhpvXMk2YFB" Target="_blank" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Custom.Brands.MicrosoftWindows" Size="Size.Small" aria-label="Download the Windows game client">
+                                Windows
+                            </MudButton>
+                            <MudButton Href="https://drive.proton.me/urls/WF9BS2PCHC#55DTLzEbSM7b" Target="_blank" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Custom.Brands.Linux" Size="Size.Small" aria-label="Download the Linux game client">
+                                Linux
+                            </MudButton>
+                            <MudButton Href="https://drive.proton.me/urls/95EWAJN9HW#IQnQkLNEmPwu" Target="_blank" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Custom.Brands.Apple" Size="Size.Small" aria-label="Download the macOS game client">
+                                macOS
+                            </MudButton>
+                        </div>
+                        <MudLink Href="/how-to-play" Color="Color.Primary">Windows setup guide</MudLink>
                     </MudStack>
                 </MudCardContent>
-                <MudCardActions Class="flex-wrap gap-2">
-                    <MudButton Href="https://drive.proton.me/urls/TGJHBP4QV0#EZhpvXMk2YFB" Target="_blank" Variant="Variant.Filled" Color="Color.Primary" Class="glow-button" StartIcon="@Icons.Custom.Brands.MicrosoftWindows" Size="Size.Small">
-                        Windows
-                    </MudButton>
-                    <MudButton Href="https://drive.proton.me/urls/WF9BS2PCHC#55DTLzEbSM7b" Target="_blank" Variant="Variant.Filled" Color="Color.Primary" Class="glow-button" StartIcon="@Icons.Custom.Brands.Linux" Size="Size.Small">
-                        Linux
-                    </MudButton>
-                    <MudButton Href="https://drive.proton.me/urls/95EWAJN9HW#IQnQkLNEmPwu" Target="_blank" Variant="Variant.Filled" Color="Color.Primary" Class="glow-button" StartIcon="@Icons.Custom.Brands.Apple" Size="Size.Small">
-                        macOS
-                    </MudButton>
-                </MudCardActions>
             </MudCard>
         </MudItem>
 
-        @* Match Server Distribution *@
         <MudItem xs="12" md="6">
-            <MudCard Class="glass-card pa-4" Elevation="0" Style="height: 100%;">
-                <MudCardContent>
-                    <MudStack Spacing="2">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@Icons.Material.Filled.Dns" Size="Size.Medium" Color="Color.Primary" />
-                            <MudText Typo="Typo.h5">Match Server Distribution</MudText>
-                        </MudStack>
-                        <MudText Typo="Typo.body1">
-                            The complete match server files required to host game servers.
-                            Download the distribution for your operating system.
-                        </MudText>
+            <MudCard Class="glass-card pa-4" Elevation="0" Style="height: 100%;" role="region" aria-labelledby="host-downloads">
+                <MudCardContent Class="d-flex flex-column gap-6">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Dns" Size="Size.Medium" Color="Color.Primary" />
+                        <MudText Typo="Typo.h5" HtmlTag="h2" id="host-downloads">Host</MudText>
+                    </MudStack>
+
+                    <MudStack Spacing="2" AlignItems="AlignItems.Start">
+                        <MudText Typo="Typo.h6" HtmlTag="h3">Match Server Launcher</MudText>
+                        <MudText>Use COMPEL to configure and launch the installed match server.</MudText>
+                        <MudButton Href="https://github.com/onlykongorfans/COMPEL" Target="_blank" Variant="Variant.Filled" Color="Color.Primary" Class="glow-button" StartIcon="@Icons.Material.Filled.Download">
+                            Get COMPEL
+                        </MudButton>
+                    </MudStack>
+
+                    <MudDivider />
+
+                    <MudStack Spacing="2" AlignItems="AlignItems.Start">
+                        <MudText Typo="Typo.h6" HtmlTag="h3">Match Server Distribution</MudText>
+                        <MudText>Download the match server files for the machine you’ll be hosting on.</MudText>
+                        <div class="d-flex flex-wrap gap-2">
+                            <MudButton Href="https://drive.proton.me/urls/YRDWW35GDG#1SiknIwCH7rn" Target="_blank" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Custom.Brands.MicrosoftWindows" Size="Size.Small" aria-label="Download the Windows match server">
+                                Windows
+                            </MudButton>
+                            <MudButton Href="https://drive.proton.me/urls/46F7CDK4J8#4W1x0JYEvtBG" Target="_blank" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Custom.Brands.Linux" Size="Size.Small" aria-label="Download the Linux match server">
+                                Linux
+                            </MudButton>
+                        </div>
                     </MudStack>
                 </MudCardContent>
-                <MudCardActions Class="flex-wrap gap-2">
-                    <MudButton Href="https://drive.proton.me/urls/YRDWW35GDG#1SiknIwCH7rn" Target="_blank" Variant="Variant.Filled" Color="Color.Primary" Class="glow-button" StartIcon="@Icons.Custom.Brands.MicrosoftWindows" Size="Size.Small">
-                        Windows
-                    </MudButton>
-                    <MudButton Href="https://drive.proton.me/urls/46F7CDK4J8#4W1x0JYEvtBG" Target="_blank" Variant="Variant.Filled" Color="Color.Primary" Class="glow-button" StartIcon="@Icons.Custom.Brands.Linux" Size="Size.Small">
-                        Linux
-                    </MudButton>
-                </MudCardActions>
             </MudCard>
         </MudItem>
     </MudGrid>

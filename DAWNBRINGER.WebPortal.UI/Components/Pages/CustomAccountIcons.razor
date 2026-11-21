@@ -8,7 +8,7 @@
 <MudContainer MaxWidth="MaxWidth.Medium" Class="px-4 pt-8 pb-8">
     <MudStack Spacing="3">
         <MudButton Href="/account" StartIcon="@Icons.Material.Filled.ArrowBack" Style="align-self: start;">Account</MudButton>
-        <MudText Typo="Typo.h4">Custom Account Icons</MudText>
+        <MudText Typo="Typo.h4" HtmlTag="h1">Custom Account Icons</MudText>
         <MudText>Buy a custom icon slot in the game store, then upload your image here. Your main account and all linked subaccounts can equip any icon in this collection.</MudText>
 
         @if (!string.IsNullOrEmpty(Error))
@@ -34,7 +34,7 @@
         {
             <MudCard Class="glass-card pa-4">
                 <MudStack Spacing="3">
-                    <MudText Typo="Typo.h6">Upload a new icon</MudText>
+                    <MudText Typo="Typo.h6" HtmlTag="h2">Upload a new icon</MudText>
                     @if (!Collection.HasPendingSlot)
                     {
                         <MudText>You have no unused upload slot. Purchase Custom Account Icon in the game store, then refresh this page.</MudText>
@@ -78,7 +78,7 @@
                 </MudStack>
             </MudCard>
 
-            <MudText Typo="Typo.h6">Your collection</MudText>
+            <MudText Typo="Typo.h6" HtmlTag="h2">Your collection</MudText>
             <MudText>Equip these in the game's vault. Each account can choose a different icon. After uploading, sign out and back into the game to refresh your owned icons.</MudText>
             @if (Collection.Icons.Count == 0)
             {

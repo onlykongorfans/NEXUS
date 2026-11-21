@@ -12,7 +12,7 @@
             <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                     <MudIcon Icon="@Icons.Material.Filled.Login" Size="Size.Large" Color="Color.Primary" />
-                    <MudText Typo="Typo.h5">Log In</MudText>
+                    <MudText Typo="Typo.h5" HtmlTag="h1">Log In</MudText>
                 </MudStack>
                 <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center">
                     Enter your account credentials to access the portal.
@@ -28,6 +28,7 @@
                                   Label="Account Name"
                                   HelperText="Your account name, between 4 and 12 characters."
                                   Variant="Variant.Outlined"
+                                  autocomplete="username"
                                   Adornment="Adornment.Start"
                                   AdornmentIcon="@Icons.Material.Filled.Person" />
 
@@ -37,6 +38,7 @@
                                   HelperText="Your account password."
                                   Variant="Variant.Outlined"
                                   InputType="@PasswordInputType"
+                                  autocomplete="current-password"
                                   Adornment="Adornment.End"
                                   AdornmentIcon="@PasswordVisibilityIcon"
                                   OnAdornmentClick="TogglePasswordVisibility"
@@ -72,6 +74,9 @@
 
 @code {
 
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    private string? ReturnURL { get; set; }
+
     private LogInFormModel FormModel { get; set; } = new ();
 
     private bool Processing { get; set; }
@@ -85,6 +90,14 @@
     private void TogglePasswordVisibility()
     {
         PasswordVisible = !PasswordVisible;
+    }
+
+    private string GetReturnDestination()
+    {
+        if (ReturnURL is not null && ReturnURL.StartsWith('/') && RedirectHttpResult.IsLocalUrl(ReturnURL))
+            return NavigationManager.ToAbsoluteUri(ReturnURL).AbsoluteUri;
+
+        return "/account";
     }
 
     private async Task HandleValidSubmit()
@@ -107,7 +120,7 @@
                 {
                     await AuthenticationService.SetToken(tokenResponse.Token);
                     Snackbar.Add("Logged in successfully.", Severity.Success);
-                    NavigationManager.NavigateTo("/account");
+                    NavigationManager.NavigateTo(GetReturnDestination(), replace: true);
                 }
             }
             else

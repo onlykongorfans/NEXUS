@@ -19,7 +19,7 @@
                 </MudButton>
                 <MudStack Spacing="2">
                     <MudText Typo="Typo.caption" Color="Color.Secondary">Administration</MudText>
-                    <MudText Typo="Typo.h4" Color="Color.Primary">Announcements</MudText>
+                    <MudText Typo="Typo.h4" HtmlTag="h1" Color="Color.Primary">Announcements</MudText>
                     <MudText Typo="Typo.body2" Color="Color.Secondary">
                         Announcements list on the client's Project KONGOR Announcement Board from their published time until they expire, and pop up once for every player. Changing an announcement's title or published time makes it pop up again. All times are in UTC.
                     </MudText>
@@ -32,7 +32,7 @@
                 <MudCard Class="glass-card pa-4 mb-6 animate-fade-in-delay-1" Elevation="0">
                     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
                         <MudStack Spacing="0">
-                            <MudText Typo="Typo.h6">Announcements</MudText>
+                            <MudText Typo="Typo.h6" HtmlTag="h2">Announcements</MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
                                 @Announcements.Count of @ContentLimits.UnexpiredAnnouncementsMaximum live or scheduled, which is as many as the board has room for.
                             </MudText>
@@ -74,7 +74,7 @@
                 @* Add Or Edit Announcement Dialog *@
                 <MudDialog @bind-Visible="AnnouncementDialogVisible" Options="DialogOptions">
                     <TitleContent>
-                        <MudText Typo="Typo.h6">@(EditingAnnouncementID is null ? "Add Announcement" : "Edit Announcement")</MudText>
+                        <MudText Typo="Typo.h6" HtmlTag="h2">@(EditingAnnouncementID is null ? "Add Announcement" : "Edit Announcement")</MudText>
                     </TitleContent>
                     <DialogContent>
                         <EditForm Model="AnnouncementFormModel" OnValidSubmit="HandleAnnouncementSubmit" id="announcement-form">

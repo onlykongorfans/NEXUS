@@ -207,6 +207,22 @@
 
 /* --- Programmatic Focus (FocusOnNavigate) ------------------ */
 
+.skip-link {
+    position: fixed;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: calc(var(--mud-zindex-appbar) + 1);
+    transform: translateY(calc(-100% - 1rem));
+    padding: 0.75rem 1rem;
+    border-radius: 4px;
+    background: var(--mud-palette-surface);
+    color: var(--mud-palette-text-primary);
+}
+
+.skip-link:focus {
+    transform: none;
+}
+
 h1:focus {
     outline: none;
 }
@@ -237,6 +253,223 @@ h1:focus {
     right: 0;
     height: 1px;
     background: linear-gradient(90deg, transparent, rgba(var(--kongor-primary-rgb), 0.3), transparent);
+}
+
+/* --- Players Online ---------------------------------------- */
+
+.players-online-card {
+    container: players-online / inline-size;
+    inline-size: min(100%, 68rem);
+    overflow: hidden;
+    border: 1px solid rgba(var(--kongor-primary-rgb), 0.2);
+    border-radius: 12px;
+    background: rgba(var(--kongor-surface-rgb), 0.94);
+    box-shadow: 0 8px 32px rgba(var(--kongor-shadow-rgb), 0.45);
+    color: var(--mud-palette-text-primary);
+    text-align: left;
+}
+
+.players-online-toggle {
+    display: none;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.65rem;
+    inline-size: min(100%, 20rem);
+    padding: 0.65rem 0.85rem;
+    border: 1px solid rgba(var(--kongor-primary-rgb), 0.25);
+    border-radius: 10px;
+    background: rgba(var(--kongor-surface-rgb), 0.92);
+    color: var(--mud-palette-text-primary);
+    font: inherit;
+    text-align: left;
+}
+
+.players-online-toggle:enabled { cursor: pointer; }
+
+.players-online-toggle:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 3px;
+}
+
+.players-online-toggle-label { font-weight: 600; line-height: 1.25; }
+
+.players-online-toggle-hint {
+    display: block;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+    font-weight: 400;
+}
+
+.players-online-icon {
+    display: grid;
+    place-items: center;
+    inline-size: 2.25rem;
+    block-size: 2.25rem;
+    border: 1px solid color-mix(in srgb, var(--mud-palette-primary) 26%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--mud-palette-primary) 10%, transparent);
+    color: var(--mud-palette-primary);
+}
+
+.players-online-empty {
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+}
+
+.players-online-title-count,
+.players-online-row dd { font-variant-numeric: tabular-nums; }
+
+.players-online-last-report,
+.players-online-status {
+    color: var(--mud-palette-secondary);
+    font-size: 0.8125rem;
+}
+
+.players-online-title {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.6rem 0.75rem;
+    padding: 0.85rem 1.25rem;
+}
+
+.players-online-heading-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.6rem;
+}
+
+.players-online-title,
+.players-online-dialog-title {
+    border-bottom: 1px solid color-mix(in srgb, var(--mud-palette-primary) 18%, transparent);
+    background: radial-gradient(ellipse at 12% 0%, color-mix(in srgb, var(--mud-palette-primary) 12%, transparent), transparent 72%);
+}
+
+.players-online-title h2 { line-height: 1.2; }
+
+.players-online-title-count {
+    padding: 0.15rem 0.5rem;
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--mud-palette-primary) 12%, transparent);
+    color: var(--mud-palette-primary);
+    font-size: 1.25rem;
+    font-weight: 650;
+    line-height: 1.25;
+    text-align: right;
+}
+
+.players-online-last-report { display: block; }
+
+.players-online-status {
+    grid-column: 2 / -1;
+    justify-self: start;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--mud-palette-secondary) 10%, transparent);
+}
+
+.players-online-content {
+    display: grid;
+    gap: 1.2rem;
+    padding: 1.15rem 1.25rem 1.25rem;
+}
+
+.mud-dialog .players-online-dialog-title,
+.mud-dialog .players-online-dialog-content { padding: 0; }
+
+.mud-dialog .players-online-dialog-title:has(.mud-button-close) { padding-inline-end: 3.25rem; }
+
+.players-online-dialog-title .players-online-title {
+    flex: 1;
+    min-width: 0;
+    padding-inline-end: 0;
+    border: 0;
+    background: none;
+}
+
+.players-online-dialog-title .players-online-icon { inline-size: 2rem; block-size: 2rem; }
+.players-online-dialog-content { overscroll-behavior: contain; }
+
+.players-online-server-grid,
+.players-online-queue-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.players-online-content h3 {
+    margin-bottom: 0.45rem;
+    color: var(--mud-palette-secondary);
+    font-size: 0.9375rem;
+    font-weight: 650;
+}
+
+.players-online-rows { margin: 0; }
+
+.players-online-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.65rem;
+    padding: 0.3rem 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--mud-palette-text-secondary) 14%, transparent);
+    font-size: 0.9375rem;
+}
+
+.players-online-row dd { margin: 0; text-align: right; }
+
+.players-online-total {
+    color: var(--mud-palette-primary);
+    font-weight: 650;
+}
+
+.players-online-queue {
+    min-width: 0;
+    padding: 0.65rem 0.8rem;
+    border: 1px solid color-mix(in srgb, var(--mud-palette-primary) 15%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--mud-palette-primary) 4%, var(--mud-palette-surface));
+}
+
+.players-online-queue h4 { min-height: 2.8rem; font-size: 0.9375rem; font-weight: 600; }
+
+.players-online-queue h4 span {
+    display: block;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+    font-weight: 400;
+}
+
+@container players-online (min-width: 52rem) {
+    .players-online-content {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+        align-items: start;
+        column-gap: 1.5rem;
+    }
+
+    .players-online-queue-section {
+        padding-inline-start: 1.5rem;
+        border-inline-start: 1px solid color-mix(in srgb, var(--mud-palette-text-secondary) 14%, transparent);
+    }
+}
+
+@media (width < 600px) {
+    .hero-section { padding-inline: 1rem; }
+    .players-online-card { display: none; }
+    .players-online-toggle { display: grid; }
+    .mud-dialog.players-online-dialog {
+        width: calc(100% - 1.5rem);
+        max-width: calc(100% - 1.5rem);
+        max-height: calc(100dvh - 1.5rem);
+        margin: 0.75rem;
+    }
+
+    .players-online-content { padding: 1rem; }
+    .players-online-title { column-gap: 0.5rem; padding: 0.75rem 1rem; }
+    .players-online-title h2 { font-size: 1.125rem; }
+    .players-online-server-grid,
+    .players-online-queue-grid { grid-template-columns: minmax(0, 1fr); }
+    .players-online-queue h4 { min-height: auto; }
 }
 
 /* --- Pulsing Text Glow ------------------------------------- */

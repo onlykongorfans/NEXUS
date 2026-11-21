@@ -7,11 +7,11 @@
 
 <div class="dark-mode">
 <MudLayout>
+    <a class="skip-link" href="@MainContentURL" @onclick="FocusMainContent" @onclick:preventDefault>Skip to main content</a>
     <MudAppBar Elevation="0" Fixed="true" Class="kongor-appbar">
         <MudContainer MaxWidth="MaxWidth.Large" Class="d-flex align-center px-4 px-sm-6 py-0">
-            <MudHidden Breakpoint="Breakpoint.LgAndUp">
-                <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="ToggleDrawer" />
-            </MudHidden>
+            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="ToggleDrawer"
+                           Class="d-lg-none" aria-label="Navigation menu" aria-controls="portal-navigation" aria-expanded="@(DrawerOpen ? "true" : "false")" />
 
             <MudButton Href="/" Color="Color.Inherit" Variant="Variant.Text" Class="kongor-home-button">
                 <MudImage Src="images/home.png" Alt="Project KONGOR" Width="40" Height="40" Class="mr-2 logo-glow" />
@@ -20,8 +20,8 @@
 
             <MudSpacer />
 
-            <MudHidden Breakpoint="Breakpoint.MdAndDown">
-                <MudStack Row="true" Class="align-center gap-2">
+            <div class="d-none d-lg-block">
+                <MudStack Row="true" Class="align-center gap-2" HtmlTag="nav" aria-label="Main navigation">
                     <MudMenu Label="Community" Color="Color.Inherit" Variant="Variant.Text" EndIcon="@Icons.Material.Filled.KeyboardArrowDown" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter">
                         <MudMenuItem Href="https://discord.com/invite/N6pKzGDqUH" Target="_blank">Discord</MudMenuItem>
                         <MudMenuItem Href="https://app.element.io/#/room/#newerth:matrix.org" Target="_blank">Element</MudMenuItem>
@@ -34,11 +34,11 @@
 
                     <MudButton Href="https://codex.kongor.net" Target="_blank" Color="Color.Inherit" Variant="Variant.Text">Knowledge Base</MudButton>
                 </MudStack>
-            </MudHidden>
+            </div>
 
             <MudSpacer />
 
-            <MudHidden Breakpoint="Breakpoint.MdAndDown">
+            <div class="d-none d-lg-block">
                 <MudStack Row="true" Class="align-center gap-2">
                     <AuthorizeView>
                         <NotAuthorized>
@@ -51,15 +51,16 @@
                         </Authorized>
                     </AuthorizeView>
                 </MudStack>
-            </MudHidden>
+            </div>
 
             <MudSpacer />
 
-            <MudIconButton Icon="@CursorTrailIcon" Color="Color.Inherit" Size="Size.Large" OnClick="ToggleCursorTrail" />
+            <MudIconButton Icon="@CursorTrailIcon" Color="Color.Inherit" Size="Size.Large" OnClick="ToggleCursorTrail"
+                           aria-label="Cursor trail" aria-pressed="@(CursorTrailEnabled ? "true" : "false")" />
         </MudContainer>
     </MudAppBar>
 
-    <MudDrawer @bind-Open="DrawerOpen" Elevation="1" Variant="DrawerVariant.Temporary">
+    <MudDrawer @bind-Open="DrawerOpen" Elevation="1" Variant="DrawerVariant.Temporary" id="portal-navigation">
         <MudNavMenu>
             <MudNavGroup Title="Community" Icon="@Icons.Material.Filled.People" Expanded="false">
                 <MudNavLink Href="https://discord.com/invite/N6pKzGDqUH" Target="_blank">Discord</MudNavLink>
@@ -85,15 +86,15 @@
 
             <MudDivider Class="my-2" />
 
-            <MudNavLink Icon="@CursorTrailIcon" OnClick="ToggleCursorTrail">@(CursorTrailEnabled ? "Disable Trail" : "Enable Trail")</MudNavLink>
+            <MudNavLink Icon="@CursorTrailIcon" OnClick="ToggleCursorTrail">@(CursorTrailEnabled ? "Disable cursor trail" : "Enable cursor trail")</MudNavLink>
         </MudNavMenu>
     </MudDrawer>
 
     <MudMainContent Style="@ContentStyle">
         <div class="d-flex flex-column" style="min-height: calc(100vh - 64px);">
-            <div class="pt-6 flex-grow-1 d-flex flex-column justify-center">
+            <main class="pt-6 flex-grow-1 d-flex flex-column justify-center" id="main-content" tabindex="-1" @ref="MainContent">
                 @Body
-            </div>
+            </main>
 
             <footer class="kongor-footer">
                 <MudContainer MaxWidth="MaxWidth.Large" Class="px-4 px-sm-6">
@@ -317,9 +318,13 @@
 
     private bool CursorTrailEnabled { get; set; }
 
+    private ElementReference MainContent { get; set; }
+
     private string CursorTrailIcon => CursorTrailEnabled ? Icons.Material.Filled.AutoFixHigh : Icons.Material.Filled.AutoFixOff;
 
     private Color AppBarButtonColour => Color.Primary;
+
+    private string MainContentURL => new UriBuilder(NavigationManager.Uri) { Fragment = "main-content" }.Uri.AbsoluteUri;
 
     private const string ContentStyle = "padding-top: 64px; min-height: 100vh; background: linear-gradient(rgba(10, 15, 13, 0.82), rgba(10, 15, 13, 0.92)), url('images/background.jpg') center/cover no-repeat fixed;";
 
@@ -360,6 +365,8 @@
     {
         DrawerOpen = !DrawerOpen;
     }
+
+    private async Task FocusMainContent() => await MainContent.FocusAsync();
 
     private async Task HandleLogOut()
     {

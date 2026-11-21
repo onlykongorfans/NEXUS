@@ -46,6 +46,9 @@ public class DAWNBRINGER
             client.BaseAddress = new Uri("https+http://web-portal-api");
         });
 
+        builder.Services.AddMemoryCache();
+        builder.Services.AddSingleton<PlayersOnlineService>();
+
         // Add Authentication And Authorization Services
         builder.Services.AddAuthentication();
         builder.Services.AddAuthorization();

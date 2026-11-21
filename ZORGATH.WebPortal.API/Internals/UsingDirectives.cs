@@ -1,3 +1,5 @@
+global using ASPIRE.Common;
+global using ASPIRE.Common.Communication;
 global using ASPIRE.Common.Constants;
 global using ASPIRE.Common.Extensions.Logging;
 global using ASPIRE.Common.Extensions.Networking;
@@ -69,6 +71,7 @@ global using KONGOR.MasterServer.Extensions.Cache;
 global using KONGOR.MasterServer.Helpers.MessageOfTheDay;
 global using KONGOR.MasterServer.Models.Announcements;
 global using KONGOR.MasterServer.Models.MessageOfTheDay;
+global using KONGOR.MasterServer.Models.ServerManagement;
 global using StackExchange.Redis;
 
 global using Role = MERRICK.DatabaseContext.Entities.Utility.Role;
