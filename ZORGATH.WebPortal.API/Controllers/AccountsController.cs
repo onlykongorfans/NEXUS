@@ -16,6 +16,13 @@ public class AccountsController(MerrickContext databaseContext, ILogger<Accounts
     /// </summary>
     private static readonly HashSet<AccountType> RedeemableAccountTypes = [AccountType.ServerHost];
 
+    [HttpGet("RegisteredCount")]
+    [AllowAnonymous]
+    [EnableRateLimiting(RateLimiterPolicies.Relaxed)]
+    [OutputCache(PolicyName = OutputCachePolicies.CacheForFiveMinutes)]
+    public Task<int> GetRegisteredAccountCount(CancellationToken cancellationToken)
+        => MerrickContext.Accounts.CountAsync(account => account.IsMain, cancellationToken);
+
     [HttpPost("{token:guid}", Name = "Create Sub-Account From Authorisation Token")]
     [Authorize(Policy = UserRoles.AllRoles)]
     [ProducesResponseType(typeof(GetBasicAccountDTO), StatusCodes.Status201Created)]

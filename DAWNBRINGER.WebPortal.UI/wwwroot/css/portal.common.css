@@ -255,6 +255,22 @@ h1:focus {
     background: linear-gradient(90deg, transparent, rgba(var(--kongor-primary-rgb), 0.3), transparent);
 }
 
+.registered-accounts-count {
+    color: var(--kongor-primary);
+    font-weight: 600;
+    text-shadow: 0 0 6px rgba(var(--kongor-primary-rgb), 0.45), 0 0 14px rgba(var(--kongor-primary-rgb), 0.18);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .registered-accounts-count {
+        animation: kongor-registered-accounts-breathe 5s ease-in-out infinite alternate;
+    }
+}
+
+@keyframes kongor-registered-accounts-breathe {
+    to { text-shadow: 0 0 10px rgba(var(--kongor-primary-rgb), 0.85), 0 0 24px rgba(var(--kongor-primary-rgb), 0.5); }
+}
+
 /* --- Players Online ---------------------------------------- */
 
 .players-online-card {

@@ -1,4 +1,5 @@
 @page "/"
+@inject RegisteredAccountCountService RegisteredAccounts
 
 <PageTitle>Project KONGOR</PageTitle>
 
@@ -13,6 +14,10 @@
             <MudButton Href="/how-to-play" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large" Class="glow-button" StartIcon="@Icons.Material.Filled.SportsEsports">
                 Start Playing
             </MudButton>
+            @if (RegisteredAccountCount is int count)
+            {
+                <MudText Typo="Typo.body2" HtmlTag="p" Align="Align.Center" Class="registered-accounts-count">Registered Accounts: @count.ToString("N0", CultureInfo.InvariantCulture)</MudText>
+            }
             <PlayersOnline />
         </MudStack>
     </div>
@@ -239,3 +244,10 @@
     </MudCard>
 
 </MudContainer>
+
+@code {
+    private int? RegisteredAccountCount { get; set; }
+
+    protected override async Task OnInitializedAsync()
+        => RegisteredAccountCount = await RegisteredAccounts.GetCount();
+}

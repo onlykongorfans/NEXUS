@@ -29,6 +29,7 @@ global using Microsoft.AspNetCore.HttpLogging;
 global using Microsoft.AspNetCore.HttpOverrides;
 global using Microsoft.AspNetCore.Identity;
 global using Microsoft.AspNetCore.Mvc;
+global using Microsoft.AspNetCore.OutputCaching;
 global using Microsoft.AspNetCore.RateLimiting;
 global using Microsoft.EntityFrameworkCore;
 global using Microsoft.EntityFrameworkCore.Diagnostics;

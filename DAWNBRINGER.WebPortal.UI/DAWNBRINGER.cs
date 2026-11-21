@@ -48,6 +48,7 @@ public class DAWNBRINGER
 
         builder.Services.AddMemoryCache();
         builder.Services.AddSingleton<PlayersOnlineService>();
+        builder.Services.AddSingleton<RegisteredAccountCountService>();
 
         // Add Authentication And Authorization Services
         builder.Services.AddAuthentication();
